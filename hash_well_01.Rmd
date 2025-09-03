@@ -1,0 +1,205 @@
+This markdown integrates the different sets within the hash_well dataset.
+The description of the sets are in the figure 1A of the manuscript.
+All data are read from and saved at a different directory to keep the repository light.
+
+Load packages.
+```{r message=FALSE}
+library(Seurat)
+library(hdf5r)
+library(openxlsx)
+library(stringr)
+
+library(future)
+options(future.globals.maxSize = 50*1e9)
+
+options(Seurat.object.assay.version = 'v5')
+```
+
+Function to remove TCR and BCR genes.
+```{r}
+filterTCRBCR <- function(rnacounts) {
+#rnacounts <- rna.counts
+
+Ighv <- grep('Ighv',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Ighd <- grep('Ighd',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Ighj <- grep('Ighj',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Igkv <- grep('Igkv',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Igkj <- grep('Igkj',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Iglv <- grep('Iglv',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Iglj <- grep('Iglj',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+
+# Collect the indexes to remove Tra, Trb, Trg and Trd genes
+Trav <- grep('Trav',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Traj <- grep('Traj',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trbv <- grep('Trbv',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trbd <- grep('Trbd',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trbj <- grep('Trbj',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trgv <- grep('Trgv',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trgj <- grep('Trgj',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trdv <- grep('Trdv',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trdd <- grep('Trdd',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trdj <- grep('Trdj',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+
+# Collect the indexes to remove constant region genes
+Igha <- grep('Igha',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Ighe <- grep('Ighe',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Ighd <- grep('Ighd',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Ighg <- grep('Ighg',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Ighm <- grep('Ighm',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Ighm <- Ighm[1]
+Igkc <- grep('Igkc',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Iglc <- grep('Iglc',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trac <- grep('Trac',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trbc <- grep('Trbc',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Tcrg <- grep('Tcrg',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Trdc <- grep('Trdc',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+# Collect the indexes to remove mitochondrial genes
+mt <- grep('mt-',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+# Collect the indexes to remove ribosomal genes
+Rpl <- grep('Rpl',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+Rps <- grep('Rps',rnacounts@Dimnames[[1]], ignore.case = FALSE)
+
+# Remove Igh, Igk, Igl and Tra, Trb, Trg, Trd from RNA
+rnacounts <- rnacounts[-c(Ighv, Ighd, Ighj, Igkv, Igkj, Iglv, Iglj,
+                                  Trav, Traj, Trbv, Trbd, Trbj, Trgv, Trgj, 
+                                  Trdv, Trdd, Trdj,
+                                  Igha, Ighe, Ighd, Ighg, Ighm, 
+                                  Igkc, Iglc, Trac, Trbc, Tcrg, 
+                                  Trdc, mt, Rpl, Rps),]
+
+return(rnacounts)
+}
+```
+
+Read files, demultiplex and generate lists.
+Then integrate the datasets and save it. After saving clear memory.
+
+hash_well_I <- all six wells 
+```{r message=FALSE}
+setwd("../hash_well_data")
+labl_hsh <- read.xlsx('HW_des.xlsx')
+ind_adt <- read.xlsx('adt_ind.xlsx', colNames = FALSE)
+
+
+setwd('./h5')
+for (j in 1:6) {
+  D.data <- Read10X_h5(paste('./', labl_hsh$Label[j], '.h5', sep = ""))
+  k1 <- str_split(labl_hsh$hashtags_pick[j], " ") # pick up the hashes
+  k2 <- as.numeric(k1[[1]])
+  k3 <- str_split(ind_adt[1,1], ", ") # pick up the ADT indexes
+  k4 <- as.numeric(k3[[1]])
+ 
+  rna.counts <- D.data$`Gene Expression` # Call the data
+  hto.counts <- D.data$`Antibody Capture`[k2 + 192, ]
+  adt.counts <- D.data$`Antibody Capture`[k4, ]
+ 
+  D.data.joint <- intersect(colnames(rna.counts), colnames(hto.counts)) # Make sure overlapping counts
+  D.data.joint <- intersect(colnames(rna.counts), colnames(adt.counts))
+  rna.counts <- rna.counts[, D.data.joint]
+  hto.counts <- hto.counts[, D.data.joint]
+  adt.counts <- adt.counts[, D.data.joint]
+  
+  # Single line removal of TCR BCR genes
+  rna.counts <- filterTCRBCR(rna.counts)
+  
+  # Create Seurat object
+  D <- CreateSeuratObject(counts = rna.counts, project = labl_hsh$Label[j], assay = "RNA") # Seurat object
+  D[["percent.mt"]] <- PercentageFeatureSet(D, pattern = "^mt-")
+ 
+  D[["HTO"]] <- CreateAssayObject(counts = hto.counts)
+  D <- NormalizeData(D, assay = "HTO", normalization.method = "CLR", verbose = FALSE) # Normalise the HTO
+  D[["ADT"]] <- CreateAssayObject(counts = adt.counts)
+  D <- NormalizeData(D, assay = "ADT", normalization.method = "CLR", verbose = TRUE) # NOrmalise ADT
+  
+  # Rename cells to avoid future conflicts
+  D$dataset <- labl_hsh$Label[j]
+  D <- RenameCells(object = D, add.cell.id = labl_hsh$Label[j])
+
+  # Cleanup
+  D <- subset(D, subset = nFeature_RNA > 500 & nFeature_RNA < 3000 & percent.mt < 2.5 & nCount_RNA < 20000)
+
+ # Demultiplexing
+  D <- HTODemux(D, assay = "HTO", positive.quantile = 0.99, verbose = TRUE) # Demultiplex
+  Idents(D) <- "HTO_classification.global"
+  D.singlet <- subset(D, idents = "Singlet")
+  
+  #SCtransform
+  #D.singlet <- SCTransform(D.singlet, vst.flavor = "v2", verbose = FALSE)
+
+  # Annotate samples following the hashtags
+  D.singlet@meta.data$orig.id = ""
+  for(k in unique(D.singlet@meta.data$HTO_maxID)){
+  if (nchar(k) == 12) {
+    D.singlet@meta.data$orig.id[D.singlet@meta.data$HTO_maxID == k] = as.character(
+                                                  paste(strsplit(labl_hsh[j,1], split = "_")[[1]][2], 
+                                                  'H0',gsub("Ms.Hashtag-", "", k), sep = ""))
+  }
+  if (nchar(k) == 13) {
+    D.singlet@meta.data$orig.id[D.singlet@meta.data$HTO_maxID == k] = as.character(
+                                                  paste(strsplit(labl_hsh[j,1], split = "_")[[1]][2], 
+                                                  'H', gsub("Ms.Hashtag-", "", k), sep = ""))
+  }
+}
+
+  if (j == 1) {
+    mObject <- D.singlet
+  }
+  if (j > 1)
+    mObject <- merge(mObject, D.singlet)
+}
+
+DefaultAssay(mObject) <- "RNA"
+mObject <- JoinLayers(mObject)
+mObject[["RNA"]] <- split(mObject[["RNA"]], f = mObject$dataset)
+
+mObject <- SCTransform(mObject, verbose = FALSE, vst.flavor = 'v2')  # per-layer SCT v2
+mObject[["SCT"]] <- split(mObject[["SCT"]], f = mObject$dataset)
+
+#DefaultAssay(mObject) <- "SCT"
+mObject <- RunPCA(mObject, npcs = 30, verbose = FALSE)  # PCA on SCT residuals
+#iObject <- IntegrateLayers(
+#  object = mObject, method = RPCAIntegration,
+#  orig.reduction = "pca", new.reduction = "integrated.rpca",
+#  assay = "SCT", verbose = FALSE
+#)
+
+mObject <- IntegrateLayers(object = mObject, method = HarmonyIntegration,
+                       orig.reduction = "pca", new.reduction = 'harmony',
+                       assay = "SCT", verbose = FALSE)
+
+mObject <- IntegrateLayers(object = mObject, method = RPCAIntegration,
+                       orig.reduction = "pca", new.reduction = 'integrated.rpca',
+                       assay = "SCT", verbose = FALSE)
+```
+
+hash_well_II <- only control cells from six wells
+```{r}
+
+```
+
+hash_well_III <- all six wells without controls
+```{r}
+
+```
+
+hash_well_IV <- five wells; pulled well absent
+```{r}
+
+```
+
+hash_well_V <- only pulled well
+```{r}
+
+```
+
+hash_well_VI <- pulled hashes eliminated
+```{r}
+
+```
+
+
+
+
+
+
+
