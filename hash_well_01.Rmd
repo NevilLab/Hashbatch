@@ -1,6 +1,12 @@
 This markdown integrates the different sets within the hash_well dataset.
 The description of the sets are in the figure 1A of the manuscript.
+It covers different types of integration as provided by Seurat 5:
+CCAIntegration, RPCAIntegration, HarmonyIntegration, FastMNNIntegration, scVIIntegration
+It also carries out cell clustering on the reductions.
+
 All data are read from and saved at a different directory to keep the repository light.
+It converts the Seurat objects to SingleCellObjects. Then it carries out batch measurements.
+Finally it creates plots for the main text and supplementary figures.
 
 Load packages.
 ```{r message=FALSE}
@@ -13,6 +19,11 @@ library(future)
 options(future.globals.maxSize = 50*1e9)
 
 options(Seurat.object.assay.version = 'v5')
+
+#library(CellMixS)
+#library(SingleCellExperiment)
+#library(ggplot2)
+library("seurat-wrappers")
 ```
 
 Function to remove TCR and BCR genes.
@@ -71,10 +82,8 @@ return(rnacounts)
 }
 ```
 
-Read files, demultiplex and generate lists.
-Then integrate the datasets and save it. After saving clear memory.
-
-hash_well_I <- all six wells 
+Read files, demultiplex and merge objects.
+Clear everything from memory other than the merged object.
 ```{r message=FALSE}
 setwd("../hash_well_data")
 labl_hsh <- read.xlsx('HW_des.xlsx')
@@ -147,34 +156,56 @@ for (j in 1:6) {
   if (j > 1)
     mObject <- merge(mObject, D.singlet)
 }
+```
+Clear memory first.
+```{r}
+#rm(list = setdiff(ls(), "mObject"))
+```
 
+hash_well_I <- all six wells (mObject)
+```{r message=FALSE}
 DefaultAssay(mObject) <- "RNA"
 mObject <- JoinLayers(mObject)
 mObject[["RNA"]] <- split(mObject[["RNA"]], f = mObject$dataset)
 
-mObject <- SCTransform(mObject, verbose = FALSE, vst.flavor = 'v2')  # per-layer SCT v2
-mObject[["SCT"]] <- split(mObject[["SCT"]], f = mObject$dataset)
+mObject <- SCTransform(mObject, verbose = FALSE, vst.flavor = 'v2')  
 
 #DefaultAssay(mObject) <- "SCT"
-mObject <- RunPCA(mObject, npcs = 30, verbose = FALSE)  # PCA on SCT residuals
-#iObject <- IntegrateLayers(
-#  object = mObject, method = RPCAIntegration,
-#  orig.reduction = "pca", new.reduction = "integrated.rpca",
-#  assay = "SCT", verbose = FALSE
-#)
+mObject <- RunPCA(mObject, npcs = 30, verbose = FALSE)  
+mObject[["SCT"]] <- split(mObject[["SCT"]], f = mObject$dataset)
+hash_well_I <- mObject
+```
+CCAIntegration, RPCAIntegration, HarmonyIntegration, FastMNNIntegration, scVIIntegration
+```{r message=FALSE}
+#mObject <- IntegrateLayers(object = mObject, method = HarmonyIntegration,
+#                       orig.reduction = "pca", new.reduction = 'harmony',
+#                       assay = "SCT", verbose = FALSE)
 
-mObject <- IntegrateLayers(object = mObject, method = HarmonyIntegration,
-                       orig.reduction = "pca", new.reduction = 'harmony',
-                       assay = "SCT", verbose = FALSE)
-
-mObject <- IntegrateLayers(object = mObject, method = RPCAIntegration,
-                       orig.reduction = "pca", new.reduction = 'integrated.rpca',
-                       assay = "SCT", verbose = FALSE)
+#mObject <- IntegrateLayers(object = mObject, method = RPCAIntegration,
+#                       orig.reduction = "pca", new.reduction = 'integrated.rpca',
+#                       assay = "SCT", verbose = FALSE)
 ```
 
 hash_well_II <- only control cells from six wells
 ```{r}
+#features <- SelectIntegrationFeatures(object = hash_well_I, assay = "SCT")
+#hash_well_I <- IntegrateLayers(object = hash_well_I, method = CCAIntegration,
+#                       orig.reduction = "pca", new.reduction = "integrated.cca",
+#                       assay = "SCT", features = features, verbose = FALSE)
 
+hash_well_I <- IntegrateLayers(object = hash_well_I, method = HarmonyIntegration,
+                       orig.reduction = "pca", new.reduction = "harmony",
+                       assay = "SCT", verbose = FALSE)
+
+hash_well_I <- IntegrateLayers(object = hash_well_I, method = RPCAIntegration,
+                       orig.reduction = "pca", new.reduction = "integrated.rpca",
+                       assay = "SCT", verbose = FALSE)
+
+#hash_well_I <- IntegrateLayers(object = hash_well_I, method = FastMNNIntegration,
+#                       orig.reduction = "pca", new.reduction = "integrated.mnn",
+#                       assay = "SCT", verbose = FALSE)
+
+#hash_well_I <- JoinLayers(hash_well_I)
 ```
 
 hash_well_III <- all six wells without controls
