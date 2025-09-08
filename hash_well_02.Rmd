@@ -1,0 +1,290 @@
+This markdown calculates the batch effects measures in the integrated reduction
+layers. Generates the relevant figures for figure 1 and supplementary items.
+
+It converts the Seurat objects to SingleCellObjects. Then it carries out batch measurements.
+Finally it creates plots for the main text and supplementary figures.
+
+Load packages.
+```{r message=FALSE}
+library(CellMixS)
+library(SingleCellExperiment)
+library(ggplot2)
+library(Seurat)
+```
+
+A function for conversion to singlecellobject. Then calculation of batch effect metrics.
+Output as the ggplot input.
+```{r}
+Int_eval <- function(object, assay, group, dim_red) {
+#object <- HW_I_RNA
+#assay <- "RNA"
+metric1 <- "entropy"
+metric2 <- "localStructure"
+#group <- "orig.id"
+#dim_red <- "INTEGRATED.RPCA"
+dim_red_pre <- "PCA"
+
+# calculate k
+k <- 3L*length(unique(object[[group]][,1]))
+
+scO <- as.SingleCellExperiment(object, assay = assay)
+
+HW_beffect1 <- evalIntegration(metrics = metric1, sce = scO, k = k, 
+                              group = group, dim_red = dim_red,
+                              n_dim = 50)
+
+# Check if k is larger than the sets to be evaluated before locStructure
+# Size of the batches must be higher than k
+while (k > min(table(object@meta.data[[group]]))) {
+  trimgroup <- names(table(object@meta.data[[group]]))[which(table(object@meta.data[[group]]) ==        
+                                                               min(table(object@meta.data[[group]])))]
+  Idents(object) <- group
+  object <- subset(object, idents = setdiff(levels(Idents(object)), trimgroup))
+
+  k <- 3L*length(unique(object[[group]][,1]))
+}
+
+scO <- as.SingleCellExperiment(object, assay = assay)
+
+HW_beffect2 <- evalIntegration(metrics = metric2, sce = scO, 
+                              group = group, 
+                              dim_red = dim_red_pre, 
+                              dim_combined = dim_red,
+                              n_dim = 50,n_combined = 50, k = k)
+
+out_dataframe1 <- data.frame(entropy <- HW_beffect1@colData@listData$entropy, 
+                            sourceset <- rep(paste(assay, group, dim_red, metric1, sep = "_"), 
+                                             length(HW_beffect1@colData@listData$entropy)))
+colnames(out_dataframe1) <- c(metric1, "sourceset")
+
+out_dataframe2 <- data.frame(LocStr <- HW_beffect2@colData@listData$overlap, 
+                            sourceset <- rep(paste(assay, group, dim_red, metric2, sep = "_"), 
+                                             length(HW_beffect2@colData@listData$overlap)))
+colnames(out_dataframe2) <- c(metric2, "sourceset")
+
+outlist <- list()
+outlist[['entropy']] <- out_dataframe1
+outlist[['LocStr']] <- out_dataframe2
+
+return(outlist)
+}
+```
+
+A function for evaluating unintegrated data only.
+```{r}
+Norm_eval <- function(object, assay, group, dim_red) {
+#object <- HW_I_RNA
+#assay <- "RNA"
+metric1 <- "entropy"
+#group <- "orig.ident"
+#dim_red <- "HARMONY"
+
+# calculate k
+k <- 3L*length(unique(object[[group]][,1]))
+
+scO <- as.SingleCellExperiment(object, assay = assay)
+
+HW_beffect1 <- evalIntegration(metrics = metric1, sce = scO, k = k, 
+                              group = group, dim_red = dim_red,
+                              n_dim = 50)
+
+out_dataframe1 <- data.frame(entropy <- HW_beffect1@colData@listData$entropy, 
+                            sourceset <- rep(paste(assay, group, dim_red, metric1, sep = "_"), 
+                                             length(HW_beffect1@colData@listData$entropy)))
+colnames(out_dataframe1) <- c(metric1, "sourceset")
+
+return(out_dataframe1)
+}
+```
+
+Another function to include the sample metadata in the Seurat objects.
+```{r}
+sample_metadata <- function(object) {
+
+sample <- c()
+for (i in object$HTO_maxID) {
+  if (i %in% c("Ms.Hashtag-1","Ms.Hashtag-2")) {
+    sample <- c(sample, "alpha")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-3","Ms.Hashtag-4")) {
+    sample <- c(sample, "beta")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-5","Ms.Hashtag-6")) {
+    sample <- c(sample, "gamma")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-7","Ms.Hashtag-8")) {
+    sample <- c(sample, "delta")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-9","Ms.Hashtag-12")) {
+    sample <- c(sample, "epsilon")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-13","Ms.Hashtag-14")) {
+    sample <- c(sample, "zeta")
+    next
+  }
+}
+
+object$sample <- sample
+return(object)
+}
+```
+
+Unintegrated
+RNA: "INTEGRATED.CCA" "HARMONY" "INTEGRATED.RPCA"
+SCT: "HARMONY"  "INTEGRATED.RPCA" "INTEGRATED.CCA"
+
+general evaluation function for batch, hash, sample etc
+```{r}
+comp_eval <- function(Obj_RNA, Obj_SCT, Group) {
+#Obj_RNA <- HW_I_RNA
+#Obj_SCT <- HW_I_SCT  
+#group <- 
+
+comp_out <- list()
+
+comp_out[['RNA_unint']] <- Norm_eval(object <- Obj_RNA, assay <- "RNA", group <- Group, dim_red <- "PCA")
+print("      RNA_unint")
+comp_out[['RNA_harmony']] <- Int_eval(object <- Obj_RNA, assay <- "RNA", group <- Group, dim_red <- "HARMONY")
+print("      RNA_harmony")
+comp_out[['RNA_cca']] <- Int_eval(object <- Obj_RNA, assay <- "RNA", group <- Group, dim_red <- "INTEGRATED.CCA")
+print("      RNA_cca")
+comp_out[['RNA_rpca']] <- Int_eval(object <- Obj_RNA, assay <- "RNA", group <- Group, dim_red <- "INTEGRATED.RPCA")
+print("      RNA_rpca")
+comp_out[['SCT_harmony']] <- Int_eval(object <- Obj_SCT, assay <- "SCT", group <- Group, dim_red <- "HARMONY")
+print("      SCT_harmony")
+comp_out[['SCT_cca']] <- Int_eval(object <- Obj_SCT, assay <- "SCT", group <- Group, dim_red <- "INTEGRATED.CCA")
+print("      SCT_cca")
+comp_out[['SCT_rpca']] <- Int_eval(object <- Obj_SCT, assay <- "SCT", group <- Group, dim_red <- "INTEGRATED.RPCA")
+print("      SCT_rpca")
+
+return(comp_out)
+}
+```
+
+Specialized evaluation for the clusters. group changes according to the reduction.
+```{r}
+clust_comp_eval <- function(Obj_RNA, Obj_SCT) {
+#Obj_RNA <- HW_I_RNA
+#Obj_SCT <- HW_I_SCT  
+comp_out <- list()
+
+g1 <- "unint_clusters"
+g2 <- "harmony_clusters"
+g3 <- "cca_clusters"
+g4 <- "rpca_clusters"
+
+comp_out[['RNA_unint']] <- Norm_eval(object <- Obj_RNA, assay <- "RNA", group <- g1, dim_red <- "PCA")
+print("      RNA_unint")
+comp_out[['RNA_harmony']] <- Int_eval(object <- Obj_RNA, assay <- "RNA", group <- g2, dim_red <- "HARMONY")
+print("      RNA_harmony")
+comp_out[['RNA_cca']] <- Int_eval(object <- Obj_RNA, assay <- "RNA", group <- g3, dim_red <- "INTEGRATED.CCA")
+print("      RNA_cca")
+comp_out[['RNA_rpca']] <- Int_eval(object <- Obj_RNA, assay <- "RNA", group <- g4, dim_red <- "INTEGRATED.RPCA")
+print("      RNA_rpca")
+comp_out[['SCT_harmony']] <- Int_eval(object <- Obj_SCT, assay <- "SCT", group <- g2, dim_red <- "HARMONY")
+print("      SCT_harmony")
+comp_out[['SCT_cca']] <- Int_eval(object <- Obj_SCT, assay <- "SCT", group <- g3, dim_red <- "INTEGRATED.CCA")
+print("      SCT_cca")
+comp_out[['SCT_rpca']] <- Int_eval(object <- Obj_SCT, assay <- "SCT", group <- g4, dim_red <- "INTEGRATED.RPCA")
+print("      SCT_rpca")
+
+return(comp_out)
+}
+```
+
+A function to call five layers of metadata for batch effect evaluation on integrated 
+and unintegrated reductions.
+```{r}
+all_comp_eval <- function(Obj_RNA, Obj_SCT) {
+#Obj_RNA <- HW_I_RNA
+#Obj_SCT <- HW_I_SCT
+all_comp_out <- list()
+
+all_comp_out[['pool']] <- comp_eval(Obj_RNA, Obj_SCT, "orig.ident") #batch, aka pool, aka well
+print("pool done")
+all_comp_out[['sample']] <- comp_eval(Obj_RNA, Obj_SCT, "sample") #sample
+print("sample done")
+all_comp_out[['hash']] <- comp_eval(Obj_RNA, Obj_SCT, "HTO_maxID") #Hashtag
+print("hashtag done")
+all_comp_out[['hashwell']] <- comp_eval(Obj_RNA, Obj_SCT, "orig.id") #hashwell
+print("pooled hash done")
+all_comp_out[['celltype']] <-clust_comp_eval(Obj_RNA, Obj_SCT) #cluster
+print("celltype done")
+
+return(all_comp_out)
+}
+```
+
+HW_I, 
+```{r}
+setwd("../hash_well_data/SObjects")
+HW_I_RNA <- sample_metadata(readRDS("hash_well_I_RNA.RDS"))
+HW_I_SCT <- sample_metadata(readRDS("hash_well_I_SCT.RDS"))
+HW_I <- all_comp_eval(HW_I_RNA, HW_I_SCT)
+setwd("../BEffects")
+saveRDS(HW_I, file = "HW_BE_I.RDS")
+rm(HW_I_RNA, HW_I_SCT, HW_I)
+```
+HW_II,
+```{r}
+setwd("../hash_well_data/SObjects")
+HW_II_RNA <- sample_metadata(readRDS("hash_well_II_RNA.RDS"))
+HW_II_SCT <- sample_metadata(readRDS("hash_well_II_SCT.RDS"))
+HW_II <- all_comp_eval(HW_II_RNA, HW_II_SCT)
+setwd("../BEffects")
+saveRDS(HW_II, file = "HW_BE_II.RDS")
+rm(HW_II_RNA, HW_II_SCT, HW_II)
+```
+HW_III,
+```{r}
+setwd("../hash_well_data/SObjects")
+HW_III_RNA <- sample_metadata(readRDS("hash_well_III_RNA.RDS"))
+HW_III_SCT <- sample_metadata(readRDS("hash_well_III_SCT.RDS"))
+HW_III <- all_comp_eval(HW_III_RNA, HW_III_SCT)
+setwd("../BEffects")
+saveRDS(HW_III, file = "HW_BE_III.RDS")
+rm(HW_III_RNA, HW_III_SCT, HW_III)
+```
+HW_IV, 
+```{r}
+setwd("../hash_well_data/SObjects")
+HW_IV_RNA <- sample_metadata(readRDS("hash_well_IV_RNA.RDS"))
+HW_IV_SCT <- sample_metadata(readRDS("hash_well_IV_SCT.RDS"))
+HW_IV <- all_comp_eval(HW_IV_RNA, HW_IV_SCT)
+setwd("../BEffects")
+saveRDS(HW_IV, file = "HW_BE_IV.RDS")
+rm(HW_IV_RNA, HW_IV_SCT, HW_IV)
+```
+HW_V, 
+```{r}
+setwd("../hash_well_data/SObjects")
+HW_V_RNA <- sample_metadata(readRDS("hash_well_V_RNA.RDS"))
+HW_V <- list()
+HW_V[['pool']] <- Norm_eval(object <- HW_V_RNA, assay <- "RNA", group <- "orig.ident", dim_red <- "PCA")
+HW_V[['sample']] <- Norm_eval(object <- HW_V_RNA, assay <- "RNA", group <- "sample", dim_red <- "PCA")
+HW_V[['hash']] <- Norm_eval(object <- HW_V_RNA, assay <- "RNA", group <- "HTO_maxID", dim_red <- "PCA")
+HW_V[['hashwell']] <- Norm_eval(object <- HW_V_RNA, assay <- "RNA", group <- "orig.id", dim_red <- "PCA")
+HW_V[['celltype']] <- Norm_eval(object <- HW_V_RNA, 
+                                     assay <- "RNA", group <- "unint_clusters", dim_red <- "PCA")
+setwd("../BEffects")
+saveRDS(HW_V, file = "HW_BE_V.RDS")
+rm(HW_V_RNA, HW_V)
+```
+HW_VI
+```{r}
+setwd("../hash_well_data/SObjects")
+HW_VI_RNA <- sample_metadata(readRDS("hash_well_VI_RNA.RDS"))
+HW_VI_SCT <- sample_metadata(readRDS("hash_well_VI_SCT.RDS"))
+HW_VI <- all_comp_eval(HW_VI_RNA, HW_VI_SCT)
+setwd("../BEffects")
+saveRDS(HW_VI, file = "HW_BE_VI.RDS")
+rm(HW_VI_RNA, HW_VI_SCT, HW_VI)
+```
+
+
+

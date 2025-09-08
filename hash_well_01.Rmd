@@ -5,8 +5,6 @@ CCAIntegration, RPCAIntegration, HarmonyIntegration, FastMNNIntegration, scVIInt
 It also carries out cell clustering on the reductions.
 
 All data are read from and saved at a different directory to keep the repository light.
-It converts the Seurat objects to SingleCellObjects. Then it carries out batch measurements.
-Finally it creates plots for the main text and supplementary figures.
 
 Load packages.
 ```{r message=FALSE}
@@ -19,11 +17,6 @@ library(future)
 options(future.globals.maxSize = 50*1e9)
 
 options(Seurat.object.assay.version = 'v5')
-
-#library(CellMixS)
-#library(SingleCellExperiment)
-#library(ggplot2)
-library("seurat-wrappers")
 ```
 
 Function to remove TCR and BCR genes.
@@ -159,76 +152,241 @@ for (j in 1:6) {
 ```
 Clear memory first.
 ```{r}
-#rm(list = setdiff(ls(), "mObject"))
+rm(list = setdiff(ls(), "mObject"))
 ```
 
-hash_well_I <- all six wells (mObject)
+Then define two function for running the following integrations:
+On RNA (RNAfunction):
+CCAIntegration, RPCAIntegration, HarmonyIntegration (also calculates the unintegrated)
+On SCT (SCTfunction):
+RPCAIntegration, HarmonyIntegration
+
+Runs neighbor search and clustering on each (with PC=50, Res=1)
+Then generates the UMAPs.
+
+RNAfunction.
+```{r}
+RNAfunction <- function(mObject) {
+# Join and split to correctly name the layers  
+DefaultAssay(mObject) <- "RNA"
+mObject <- JoinLayers(mObject)
+mObject[["RNA"]] <- split(mObject[["RNA"]], f = mObject$dataset)
+# Unintegrated Normalized RNA
+mObject <- NormalizeData(mObject)
+mObject <- FindVariableFeatures(mObject, nfeatures = 3000)
+mObject <- ScaleData(mObject)
+mObject <- RunPCA(mObject, verbose = FALSE) 
+
+mObject <- FindNeighbors(mObject, dims = 1:50, reduction = "pca")
+mObject <- FindClusters(mObject, resolution = 1, cluster.name = "unint_clusters")
+mObject <- RunUMAP(mObject, reduction = "pca", dims = 1:50, reduction.name = "umap.unint")
+# CCA integration
+mObject <- IntegrateLayers(object = mObject, method = CCAIntegration,
+                       orig.reduction = "pca", new.reduction = "integrated.cca",
+                       assay = "RNA", verbose = FALSE)
+
+mObject <- FindNeighbors(mObject, dims = 1:50, reduction = "integrated.cca")
+mObject <- FindClusters(mObject, resolution = 1, cluster.name = "cca_clusters")
+mObject <- RunUMAP(mObject, reduction = "integrated.cca", dims = 1:50, reduction.name = "umap.cca")
+# Harmony integration
+mObject <- IntegrateLayers(object = mObject, method = HarmonyIntegration,
+                       orig.reduction = "pca", new.reduction = "harmony",
+                       assay = "RNA", verbose = FALSE)
+
+mObject <- FindNeighbors(mObject, dims = 1:50, reduction = "harmony")
+mObject <- FindClusters(mObject, resolution = 1, cluster.name = "harmony_clusters")
+mObject <- RunUMAP(mObject, reduction = "harmony", dims = 1:50, reduction.name = "umap.harmony")
+# RPCA integration
+mObject <- IntegrateLayers(object = mObject, method = RPCAIntegration,
+                       orig.reduction = "pca", new.reduction = "integrated.rpca",
+                       assay = "RNA", verbose = FALSE)
+
+mObject <- FindNeighbors(mObject, dims = 1:50, reduction = "integrated.rpca")
+mObject <- FindClusters(mObject, resolution = 1, cluster.name = "rpca_clusters")
+mObject <- RunUMAP(mObject, reduction = "integrated.rpca", dims = 1:50, reduction.name = "umap.rpca")
+
+mObject <- JoinLayers(mObject)
+return(mObject)
+}
+```
+SCTfunction.
 ```{r message=FALSE}
+SCTfunction <- function(mObject) {
 DefaultAssay(mObject) <- "RNA"
 mObject <- JoinLayers(mObject)
 mObject[["RNA"]] <- split(mObject[["RNA"]], f = mObject$dataset)
 
 mObject <- SCTransform(mObject, verbose = FALSE, vst.flavor = 'v2')  
 
-#DefaultAssay(mObject) <- "SCT"
-mObject <- RunPCA(mObject, npcs = 30, verbose = FALSE)  
 mObject[["SCT"]] <- split(mObject[["SCT"]], f = mObject$dataset)
-hash_well_I <- mObject
-```
-CCAIntegration, RPCAIntegration, HarmonyIntegration, FastMNNIntegration, scVIIntegration
-```{r message=FALSE}
-#mObject <- IntegrateLayers(object = mObject, method = HarmonyIntegration,
-#                       orig.reduction = "pca", new.reduction = 'harmony',
-#                       assay = "SCT", verbose = FALSE)
+mObject <- JoinLayers(mObject)
+mObject[["SCT"]] <- split(mObject[["SCT"]], f = mObject$dataset)
 
-#mObject <- IntegrateLayers(object = mObject, method = RPCAIntegration,
-#                       orig.reduction = "pca", new.reduction = 'integrated.rpca',
-#                       assay = "SCT", verbose = FALSE)
+mObject <- RunPCA(mObject, npcs = 50, verbose = FALSE)  
+
+mObject <- IntegrateLayers(object = mObject, method = HarmonyIntegration,
+                       orig.reduction = "pca", new.reduction = "harmony",
+                       assay = "SCT", verbose = FALSE)
+
+mObject <- FindNeighbors(mObject, reduction = "harmony", dims = 1:50)
+mObject <- FindClusters(mObject, resolution = 1, cluster.name = "harmony_clusters")
+mObject <- RunUMAP(mObject, reduction = "harmony", dims = 1:50, reduction.name = "umap.harmony")
+
+mObject <- IntegrateLayers(object = mObject, method = RPCAIntegration,
+                       orig.reduction = "pca", new.reduction = "integrated.rpca",
+                       assay = "SCT", verbose = FALSE)
+
+mObject <- FindNeighbors(mObject, reduction = "integrated.rpca", dims = 1:50)
+mObject <- FindClusters(mObject, resolution = 1, cluster.name = "rpca_clusters")
+mObject <- RunUMAP(mObject, reduction = "integrated.rpca", dims = 1:50, reduction.name = "umap.rpca")
+
+mObject <- IntegrateLayers(object = mObject, method = CCAIntegration,
+                       orig.reduction = "pca", new.reduction = "integrated.cca",
+                       assay = "SCT", verbose = FALSE)
+
+mObject <- FindNeighbors(mObject, reduction = "integrated.cca", dims = 1:50)
+mObject <- FindClusters(mObject, resolution = 1, cluster.name = "cca_clusters")
+mObject <- RunUMAP(mObject, reduction = "integrated.cca", dims = 1:50, reduction.name = "umap.cca")
+
+mObject <- JoinLayers(mObject)
+return(mObject)
+}
+```
+
+hash_well_I <- all six wells (mObject)
+```{r message=FALSE}
+hash_well_I <- mObject
+
+hash_well_I_RNA <- RNAfunction(hash_well_I)
+hash_well_I_SCT <- SCTfunction(hash_well_I)
+
+setwd("../hash_well_data/SObjects")
+SaveSeuratRds(hash_well_I_RNA, file = "hash_well_I_RNA.RDS")
+SaveSeuratRds(hash_well_I_SCT, file = "hash_well_I_SCT.RDS")
+rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
 ```
 
 hash_well_II <- only control cells from six wells
 ```{r}
-#features <- SelectIntegrationFeatures(object = hash_well_I, assay = "SCT")
-#hash_well_I <- IntegrateLayers(object = hash_well_I, method = CCAIntegration,
-#                       orig.reduction = "pca", new.reduction = "integrated.cca",
-#                       assay = "SCT", features = features, verbose = FALSE)
+hash_well_II <- mObject
 
-hash_well_I <- IntegrateLayers(object = hash_well_I, method = HarmonyIntegration,
-                       orig.reduction = "pca", new.reduction = "harmony",
-                       assay = "SCT", verbose = FALSE)
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-3")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-4")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-5")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-6")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-7")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-8")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-9")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-12")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-13")
+hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-14")
 
-hash_well_I <- IntegrateLayers(object = hash_well_I, method = RPCAIntegration,
-                       orig.reduction = "pca", new.reduction = "integrated.rpca",
-                       assay = "SCT", verbose = FALSE)
+hash_well_II_RNA <- RNAfunction(hash_well_II)
+hash_well_II_SCT <- SCTfunction(hash_well_II)
 
-#hash_well_I <- IntegrateLayers(object = hash_well_I, method = FastMNNIntegration,
-#                       orig.reduction = "pca", new.reduction = "integrated.mnn",
-#                       assay = "SCT", verbose = FALSE)
-
-#hash_well_I <- JoinLayers(hash_well_I)
+setwd("../hash_well_data/SObjects")
+SaveSeuratRds(hash_well_II_RNA, file = "hash_well_II_RNA.RDS")
+SaveSeuratRds(hash_well_II_SCT, file = "hash_well_II_SCT.RDS")
+rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
 ```
 
 hash_well_III <- all six wells without controls
 ```{r}
+hash_well_III <- mObject
 
+hash_well_III <- subset(hash_well_III, subset = HTO_maxID != "Ms.Hashtag-1")
+hash_well_III <- subset(hash_well_III, subset = HTO_maxID != "Ms.Hashtag-2")
+
+hash_well_III_RNA <- RNAfunction(hash_well_III)
+hash_well_III_SCT <- SCTfunction(hash_well_III)
+
+setwd("../hash_well_data/SObjects")
+SaveSeuratRds(hash_well_III_RNA, file = "hash_well_III_RNA.RDS")
+SaveSeuratRds(hash_well_III_SCT, file = "hash_well_III_SCT.RDS")
+rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
 ```
 
 hash_well_IV <- five wells; pulled well absent
 ```{r}
+hash_well_IV <- mObject
 
+hash_well_IV <- subset(hash_well_IV, subset = orig.ident != "pool_F")
+
+hash_well_IV_RNA <- RNAfunction(hash_well_IV)
+hash_well_IV_SCT <- SCTfunction(hash_well_IV)
+
+setwd("../hash_well_data/SObjects")
+SaveSeuratRds(hash_well_IV_RNA, file = "hash_well_IV_RNA.RDS")
+SaveSeuratRds(hash_well_IV_SCT, file = "hash_well_IV_SCT.RDS")
+rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
 ```
 
 hash_well_V <- only pulled well
 ```{r}
+hash_well_V <- mObject
 
+hash_well_V <- subset(hash_well_V, subset = orig.ident == "pool_F")
+
+# Join and split to correctly name the layers  
+DefaultAssay(hash_well_V) <- "RNA"
+hash_well_V <- JoinLayers(hash_well_V)
+#hash_well_V[["RNA"]] <- split(hash_well_V[["RNA"]], f = hash_well_V$dataset)
+# Unintegrated Normalized RNA
+hash_well_V <- NormalizeData(hash_well_V)
+hash_well_V <- FindVariableFeatures(hash_well_V, nfeatures = 3000)
+hash_well_V <- ScaleData(hash_well_V)
+hash_well_V <- RunPCA(hash_well_V, verbose = FALSE) 
+
+hash_well_V <- FindNeighbors(hash_well_V, dims = 1:50, reduction = "pca")
+hash_well_V <- FindClusters(hash_well_V, resolution = 1, cluster.name = "unint_clusters")
+hash_well_V <- RunUMAP(hash_well_V, reduction = "pca", dims = 1:50, reduction.name = "umap.unint")
+
+#hash_well_V_RNA <- RNAfunction(hash_well_V)
+
+setwd("../hash_well_data/SObjects")
+SaveSeuratRds(hash_well_V, file = "hash_well_V_RNA.RDS")
+#rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
 ```
 
 hash_well_VI <- pulled hashes eliminated
 ```{r}
+hash_well_VI <- mObject
+
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "AH01")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "AH02")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "BH01")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "BH02")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "CH01")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "CH02")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "DH01")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "DH02")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "EH01")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "EH02")
+
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH03")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH04")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH05")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH06")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH07")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH08")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH09")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH12")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH13")
+hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH14")
+
+hash_well_VI_RNA <- RNAfunction(hash_well_VI)
+hash_well_VI_SCT <- SCTfunction(hash_well_VI)
+
+setwd("../hash_well_data/SObjects")
+SaveSeuratRds(hash_well_VI_RNA, file = "hash_well_VI_RNA.RDS")
+SaveSeuratRds(hash_well_VI_SCT, file = "hash_well_VI_SCT.RDS")
+rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
+```
+  Supplementary UMAP plot.
+```{r}
 
 ```
-
-
+  
 
 
 
