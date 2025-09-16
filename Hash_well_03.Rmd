@@ -1,0 +1,626 @@
+This markdown plots the following:
+UMAPs of different integrations.
+violin plots of the entropies and local struct.
+
+Load packages.
+```{r message=FALSE}
+library(Seurat)
+library(ggplot2)
+library(ggpubr)
+```
+
+Load the batch effect data frames.
+```{r}
+setwd("C:/Users/budha/Documents/R2/Hash_Batch/BEffects")
+HW_BE_I <- readRDS("HW_BE_I.RDS")
+HW_BE_II <- readRDS("HW_BE_II.RDS")
+HW_BE_III <- readRDS("HW_BE_III.RDS")
+HW_BE_IV <- readRDS("HW_BE_IV.RDS")
+HW_BE_V <- readRDS("HW_BE_V.RDS")
+HW_BE_VI <- readRDS("HW_BE_VI.RDS")
+```
+
+Generate the input lists for the norm plots and the integrated batch effects.
+```{r}
+norm_list <- list()
+norm_list[["I"]] <- HW_BE_I
+norm_list[["II"]] <- HW_BE_II
+norm_list[["III"]] <- HW_BE_III
+norm_list[["IV"]] <- HW_BE_IV
+norm_list[["V"]] <- HW_BE_V
+norm_list[["VI"]] <- HW_BE_VI
+
+int_list <- list()
+int_list[["I"]] <- HW_BE_I
+int_list[["II"]] <- HW_BE_II
+int_list[["III"]] <- HW_BE_III
+int_list[["IV"]] <- HW_BE_IV
+int_list[["VI"]] <- HW_BE_VI
+```
+
+Clear memory.
+```{r}
+rm(list = setdiff(ls(), c("norm_list", "int_list")))
+```
+
+First Write a fuction for int_list.
+RNA, SCT 
+cca, rpca, harmony
+entropy, localstruct
+
+from all data frames and plots the violin diagrams with the specific colorcode.
+```{r}
+Int_plot <- function(layer, reduc, metric) {
+#layer <- "RNA"
+#reduc <- "harmony"
+#metric <- "entropy"
+
+call <- paste(layer, reduc, sep = "_")
+metadata <- c("pool", "sample", "celltype")
+setup <- c("I", "II", "III", "IV", "VI")
+ggplotlist <- list()
+
+for (j in metadata) {
+  n <- 1
+  for (i in setup) {
+    df_temp <- int_list[[i]][[j]][[call]][[metric]]
+    df_temp$setup <- rep(i, dim(df_temp)[1])
+    
+    if (n == 1) {
+      collect <- df_temp
+    }
+    if (n > 1) {
+      collect <- rbind(collect, df_temp)
+    }
+    n <- n + 1
+  }
+  collect$setup <- factor(collect$setup, levels = setup)
+  ggplotlist[[j]] <- collect
+}
+
+#I <- "#D81B60"
+#II <- "#987201"
+#III <- "#078872"
+#IV <- "#751C1C"
+#V <- "#F4A9C7"
+#V <- "#1E88E5"
+
+# plot
+plot_list <- list()
+for (n in 1:3) {
+  colour <- c("#D81B60", "#987201", "#078872", "#751C1C", "#1E88E5")
+  if ((n == 2) & (metric == "entropy")) {
+    colour <- c("#D81B60", "#078872", "#751C1C", "#1E88E5")
+  } 
+  #colnames(ggplotlist[[metadata[n]]])
+  #if (metric == "entropy") {
+  plot_list[[n]] <- ggplot(ggplotlist[[metadata[n]]], 
+                         aes(setup, .data[[colnames(ggplotlist[[metadata[n]]])[1]]], fill = setup)) + 
+  geom_violin() +
+  scale_fill_manual(values = colour) +
+  geom_boxplot(width=0.1, fill="white", outlier.size = 0.3) +
+  stat_summary(fun=mean, geom="point", shape=20, size=3, color="black", fill="black") +
+  theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.text = element_blank()) +
+  theme(axis.title = element_blank()) + ylim(c(0, 1)) #+
+  #theme(plot.margin = margin(t = .1, r = .1, b = .6, l = .1, unit = "cm"))
+  #}
+  
+  #if (metric == "LocStr") {
+  #plot_list[[n]] <- ggplot(ggplotlist[[metadata[n]]], 
+  #                       aes(setup, .data[[colnames(ggplotlist[[metadata[n]]])[1]]], fill = setup)) + 
+  #geom_boxplot(width=0.4, outlier.size = 0.3) +
+  #stat_summary(fun=mean, geom="point", shape=20, size=3, color="black", fill="black") +
+  #scale_fill_manual(values = colour) +
+  #theme_bw() + NoLegend() +
+  #theme(panel.grid.major = element_blank(),
+  #panel.grid.minor = element_blank(),
+  #axis.text = element_blank()) +
+  #theme(axis.title = element_blank()) + ylim(c(0, 1))
+  #}
+}
+
+plot <- ggarrange(plotlist = plot_list, nrow = 1, ncol = 3)
+
+return(plot)
+}
+```
+
+Plot the unintegrated data - Norm_list.
+```{r}
+#metadata <- c("pool", "sample", "hash", "hashwell", "celltype")
+metadata <- c("pool", "sample", "celltype")
+setup <- c("I", "II", "III", "IV", "V", "VI")
+
+ggplotnorm <- list()
+
+for (j in metadata) {
+  n <- 1
+  for (i in setup) {
+    if (i == "V") {
+      df_temp <- norm_list[[i]][[j]]
+    }
+    if (i != "V") {
+      df_temp <- norm_list[[i]][[j]]$RNA_unint
+    }
+    df_temp$setup <- rep(i, dim(df_temp)[1])
+    
+    if (n == 1) {
+      collect <- df_temp
+    }
+    if (n > 1) {
+      collect <- rbind(collect, df_temp)
+    }
+    n <- n + 1
+  }
+  collect$setup <- factor(collect$setup, levels = setup)
+  ggplotnorm[[j]] <- collect
+}
+
+plot_list <- list()
+for (n in 1:3) {
+  colour <- c("#D81B60", "#987201", "#078872", "#751C1C", "#F4A9C7",  "#1E88E5")
+  if ((n == 2)) {
+    colour <- c("#D81B60", "#078872", "#751C1C", "#F4A9C7", "#1E88E5")
+  } 
+  if ((n == 1)) {
+    colour <- c("#D81B60", "#987201", "#078872", "#751C1C",  "#1E88E5")
+  } 
+
+  plot_list[[n]] <- ggplot(ggplotnorm[[metadata[n]]], 
+                         aes(setup, .data[[colnames(ggplotnorm[[metadata[n]]])[1]]], fill = setup)) + 
+  geom_violin() +
+  scale_fill_manual(values = colour) +
+  geom_boxplot(width=0.1, fill="white", outlier.size = 0.3) +
+  stat_summary(fun=mean, geom="point", shape=20, size=3, color="black", fill="black") +
+  theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.text = element_blank()) +
+  theme(axis.title = element_blank()) + ylim(c(0, 1)) +
+  theme(plot.margin = margin(t = .1, r = .1, b = .6, l = .1, unit = "cm"))
+}
+
+plot <- ggarrange(plotlist = plot_list, nrow = 3, ncol = 1)
+```
+
+Create the individual plots serially.
+```{r}
+RNA_harmony_entropy <- Int_plot(layer <- "RNA", reduc <- "harmony", metric <- "entropy")
+RNA_cca_entropy <- Int_plot(layer <- "RNA", reduc <- "cca", metric <- "entropy")
+RNA_rpca_entropy <- Int_plot(layer <- "RNA", reduc <- "rpca", metric <- "entropy")
+
+#RNA_harmony_LocStr <- Int_plot(layer <- "RNA", reduc <- "harmony", metric <- "LocStr")
+#RNA_cca_LocStr <- Int_plot(layer <- "RNA", reduc <- "cca", metric <- "LocStr")
+#RNA_rpca_LocStr <- Int_plot(layer <- "RNA", reduc <- "rpca", metric <- "LocStr")
+
+SCT_harmony_entropy <- Int_plot(layer <- "SCT", reduc <- "harmony", metric <- "entropy")
+SCT_cca_entropy <- Int_plot(layer <- "SCT", reduc <- "cca", metric <- "entropy")
+SCT_rpca_entropy <- Int_plot(layer <- "SCT", reduc <- "rpca", metric <- "entropy")
+
+#SCT_harmony_LocStr <- Int_plot(layer <- "SCT", reduc <- "harmony", metric <- "LocStr")
+#SCT_cca_LocStr <- Int_plot(layer <- "SCT", reduc <- "cca", metric <- "LocStr")
+#SCT_rpca_LocStr <- Int_plot(layer <- "SCT", reduc <- "rpca", metric <- "LocStr")
+```
+
+Know the medians of sample entropy and pool entropy in V and II respectively.
+```{r}
+pool_thresh <- median(norm_list$II$pool$RNA_unint$entropy)
+
+sample_thresh <- median(norm_list$V$sample$entropy)
+```
+
+Calculate % of cells above a given entropy threshold.
+```{r}
+pct_calc <- function(array, thresh) {
+#array <- norm_list$I$pool$RNA_unint$entropy
+#array <- int_list$I$pool$RNA_cca$entropy$entropy
+pct_out <- (length(which(array > thresh))/length(array))*100
+
+return(pct_out)
+}
+```
+Calc pct.
+```{r}
+pct_calc(norm_list$I$pool$RNA_unint$entropy, pool_thresh)
+pct_calc(norm_list$II$pool$RNA_unint$entropy, pool_thresh)
+pct_calc(norm_list$III$pool$RNA_unint$entropy, pool_thresh)
+pct_calc(norm_list$IV$pool$RNA_unint$entropy, pool_thresh)
+pct_calc(norm_list$VI$pool$RNA_unint$entropy, pool_thresh)
+
+pct_calc(norm_list$I$sample$RNA_unint$entropy, sample_thresh)
+pct_calc(norm_list$III$sample$RNA_unint$entropy, sample_thresh)
+pct_calc(norm_list$IV$sample$RNA_unint$entropy, sample_thresh)
+pct_calc(norm_list$V$sample$entropy, sample_thresh)
+pct_calc(norm_list$VI$sample$RNA_unint$entropy, sample_thresh)
+
+pct_calc(int_list$I$pool$RNA_rpca$entropy$entropy, pool_thresh)
+pct_calc(int_list$II$pool$RNA_rpca$entropy$entropy, pool_thresh)
+pct_calc(int_list$III$pool$RNA_rpca$entropy$entropy, pool_thresh)
+pct_calc(int_list$IV$pool$RNA_rpca$entropy$entropy, pool_thresh)
+pct_calc(int_list$VI$pool$RNA_rpca$entropy$entropy, pool_thresh)
+
+pct_calc(int_list$I$pool$SCT_rpca$entropy$entropy, pool_thresh)
+#pct_calc(int_list$II$pool$SCT_rpca$entropy$entropy, pool_thresh)
+pct_calc(int_list$III$pool$SCT_rpca$entropy$entropy, pool_thresh)
+pct_calc(int_list$IV$pool$SCT_rpca$entropy$entropy, pool_thresh)
+pct_calc(int_list$VI$pool$SCT_rpca$entropy$entropy, pool_thresh)
+
+pct_calc(int_list$I$sample$SCT_rpca$entropy$entropy, sample_thresh)
+pct_calc(int_list$III$sample$SCT_rpca$entropy$entropy, sample_thresh)
+pct_calc(int_list$IV$sample$SCT_rpca$entropy$entropy, sample_thresh)
+pct_calc(int_list$VI$sample$SCT_rpca$entropy$entropy, sample_thresh)
+```
+Bar diagram of pool.
+```{r}
+bar_pool <- c()
+bar_pool <- c(bar_pool, pct_calc(norm_list$I$pool$RNA_unint$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(norm_list$III$pool$RNA_unint$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(norm_list$IV$pool$RNA_unint$entropy, pool_thresh))
+bar_pool <- c(bar_pool, pct_calc(norm_list$VI$pool$RNA_unint$entropy, pool_thresh))
+bar_pool <- c(bar_pool,0)
+bar_pool <- c(bar_pool,pct_calc(int_list$I$pool$RNA_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$III$pool$RNA_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$IV$pool$RNA_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$V$pool$RNA_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,0)
+bar_pool <- c(bar_pool,pct_calc(int_list$I$pool$RNA_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$III$pool$RNA_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$IV$pool$RNA_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$V$pool$RNA_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,0)
+bar_pool <- c(bar_pool,pct_calc(int_list$I$pool$RNA_rpca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$III$pool$RNA_rpca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$IV$pool$RNA_rpca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$V$pool$RNA_rpca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,0)
+bar_pool <- c(bar_pool,pct_calc(int_list$I$pool$SCT_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$III$pool$SCT_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$IV$pool$SCT_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$V$pool$SCT_harmony$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,0)
+bar_pool <- c(bar_pool,pct_calc(int_list$I$pool$SCT_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$III$pool$SCT_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$IV$pool$SCT_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$V$pool$SCT_cca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,0)
+bar_pool <- c(bar_pool,pct_calc(int_list$I$pool$SCT_rpca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$III$pool$SCT_rpca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$IV$pool$SCT_rpca$entropy$entropy, pool_thresh))
+bar_pool <- c(bar_pool,pct_calc(int_list$V$pool$SCT_rpca$entropy$entropy, pool_thresh))
+
+bar_pool_data <- data.frame(serial <- 1:34, bar_pool)
+colnames(bar_pool_data) <- c("serial", "bar_pool")
+
+col <- c("#D81B60", "#078872", "#751C1C", "#1E88E5", "#FFFFFF")
+setup <- c("I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI")
+bar_pool_data$setup <- factor(setup, levels = c("I", "III", "IV", "VI", "null"))
+ggplot(bar_pool_data, aes(serial, bar_pool, fill = setup)) + geom_bar(stat="identity") +
+  scale_fill_manual(values = col) + theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.text = element_blank()) +
+  theme(axis.title = element_blank()) + scale_y_continuous(breaks = c(25,50))
+```
+Bar diagram of sample.
+```{r}
+bar_sample <- c()
+bar_sample <- c(bar_sample, pct_calc(norm_list$I$sample$RNA_unint$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(norm_list$III$sample$RNA_unint$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(norm_list$IV$sample$RNA_unint$entropy, sample_thresh))
+bar_sample <- c(bar_sample, pct_calc(norm_list$VI$sample$RNA_unint$entropy, sample_thresh))
+bar_sample <- c(bar_sample,0)
+bar_sample <- c(bar_sample,pct_calc(int_list$I$sample$RNA_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$III$sample$RNA_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$IV$sample$RNA_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$V$sample$RNA_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,0)
+bar_sample <- c(bar_sample,pct_calc(int_list$I$sample$RNA_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$III$sample$RNA_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$IV$sample$RNA_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$V$sample$RNA_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,0)
+bar_sample <- c(bar_sample,pct_calc(int_list$I$sample$RNA_rpca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$III$sample$RNA_rpca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$IV$sample$RNA_rpca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$V$sample$RNA_rpca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,0)
+bar_sample <- c(bar_sample,pct_calc(int_list$I$sample$SCT_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$III$sample$SCT_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$IV$sample$SCT_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$V$sample$SCT_harmony$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,0)
+bar_sample <- c(bar_sample,pct_calc(int_list$I$sample$SCT_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$III$sample$SCT_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$IV$sample$SCT_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$V$sample$SCT_cca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,0)
+bar_sample <- c(bar_sample,pct_calc(int_list$I$sample$SCT_rpca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$III$sample$SCT_rpca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$IV$sample$SCT_rpca$entropy$entropy, sample_thresh))
+bar_sample <- c(bar_sample,pct_calc(int_list$V$sample$SCT_rpca$entropy$entropy, sample_thresh))
+
+bar_sample_data <- data.frame(serial <- 1:34, bar_sample)
+colnames(bar_sample_data) <- c("serial", "bar_sample")
+
+col <- c("#D81B60", "#078872", "#751C1C", "#1E88E5", "#FFFFFF")
+setup <- c("I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI", "null",
+           "I", "III", "IV", "VI")
+bar_sample_data$setup <- factor(setup, levels = c("I", "III", "IV", "VI", "null"))
+ggplot(bar_sample_data, aes(serial, bar_sample, fill = setup)) + geom_bar(stat="identity") +
+  scale_fill_manual(values = col) + theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.text = element_blank()) +
+  theme(axis.title = element_blank()) + scale_y_continuous(breaks = c(25,50))
+```
+
+Load packages.
+```{r message=FALSE}
+library(celldex)
+library(SingleR)
+```
+
+Load the Seurat objects.
+```{r message=FALSE}
+setwd("C:/Users/budha/Documents/R2/Hash_Batch/SObjects")
+hash_well_I_RNA <- readRDS("hash_well_I_RNA.RDS")
+hash_well_I_SCT <- readRDS("hash_well_I_SCT.RDS")
+hash_well_II_RNA <- readRDS("hash_well_II_RNA.RDS")
+hash_well_II_SCT <- readRDS("hash_well_II_SCT.RDS")
+hash_well_III_RNA <- readRDS("hash_well_III_RNA.RDS")
+hash_well_III_SCT <- readRDS("hash_well_III_SCT.RDS")
+hash_well_IV_RNA <- readRDS("hash_well_IV_RNA.RDS")
+hash_well_IV_SCT <- readRDS("hash_well_IV_SCT.RDS")
+hash_well_V_RNA <- readRDS("hash_well_V_RNA.RDS")
+hash_well_VI_RNA <- readRDS("hash_well_VI_RNA.RDS")
+hash_well_VI_SCT <- readRDS("hash_well_VI_SCT.RDS")
+```
+
+Carry out singleR rough annotation for all clustering layers.
+Write a common function first.
+```{r}
+#UMAPannote <- function(Object, Ref, Clusters, new_meta, reduc) 
+Object <- hash_well_I_RNA
+Ref <- ref1
+Clusters <- "cca_clusters"
+new_meta <- "cca_annotation"
+reduc <- "umap.cca"
+
+#ref <- celldex::ImmGenData()
+#ref1 <- as.data.frame(colData(ref))
+
+#Object_counts <- GetAssayData(Object@assays$RNA, layer = 'counts') 
+Object_counts <- LayerData(Object@assays$RNA, layer = 'counts')
+Annotes1 <- SingleR(test = as.matrix(Object_counts), ref = Ref, clusters = Object[[Clusters]], labels = Ref$label.main)
+
+Object[[new_meta]] <- Annotes1@listData$labels[match(Object[[Clusters]],rownames(Annotes1))]
+
+# plot
+plots1 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = new_meta, label = FALSE, label.size = 7, repel = TRUE)
+plots2 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = "orig.ident", label = FALSE, label.size = 7, repel = TRUE)
+#print(plots1)
+```
+```{r}
+convert_sample <- function(object) {
+#object <- hash_well_V_RNA
+sample <- c()
+for (i in object$HTO_maxID) {
+  if (i %in% c("Ms.Hashtag-1","Ms.Hashtag-2")) {
+    sample <- c(sample, "Aalpha")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-3","Ms.Hashtag-4")) {
+    sample <- c(sample, "Bbeta")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-5","Ms.Hashtag-6")) {
+    sample <- c(sample, "cgamma")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-7","Ms.Hashtag-8")) {
+    sample <- c(sample, "Ddelta")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-9","Ms.Hashtag-12")) {
+    sample <- c(sample, "Eepsilon")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-13","Ms.Hashtag-14")) {
+    sample <- c(sample, "Fzeta")
+    next
+  }
+}
+
+object$sample <- sample
+}
+```
+
+Write a function to make the dimplots: pools.
+```{r}
+DimPlot_pools <- function(object, reduc, ptsize) {
+#object <- hash_well_I_RNA
+col <- c('#C77CFF','#00C19A','#CD9600','#F8766D','#B19470','#00B8E7')
+
+level <- unique(object$orig.ident)
+level <- level[order(level)]
+
+object$orig.ident.factor <- factor(object$orig.ident, levels = level)
+
+P <- DimPlot(object, reduction = reduc, raster=TRUE, pt.size = ptsize,
+        group.by = "orig.ident.factor", label = FALSE, cols = col[1:length(level)]) + NoLegend()
+
+return(P)
+}
+```
+
+Write a function to make the dimplots: samples.
+```{r}
+DimPlot_samples <- function(object, reduc, ptsize) {
+#object <- hash_well_I_RNA
+object$sample <- convert_sample(object)
+col <- c('#C77CFF','#00C19A','#CD9600','#F8766D','#B19470','#00B8E7')
+samples <- c("Aalpha", "Bbeta", "cgamma","Ddelta","Eepsilon","Fzeta")
+level <- unique(object$sample)
+level <- level[order(level)]
+
+object$sample.factor <- factor(object$sample, levels = level)
+
+P <- DimPlot(object, reduction = reduc, raster=TRUE, pt.size = ptsize,
+        group.by = "sample.factor", label = FALSE, 
+        cols = col[samples %in% level]) + NoLegend()
+
+return(P)
+}
+```
+
+Call the dimplot_pools function serially and generate the plot.
+```{r}
+p <- vector(mode = "list", length = 30)
+#hash_well_I_RNA 
+p[[1]] <- DimPlot_pools(hash_well_I_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[2]] <- DimPlot_pools(hash_well_I_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[3]] <- DimPlot_pools(hash_well_I_RNA, reduc = "umap.rpca", ptsize = 1.5)
+#hash_well_I_SCT 
+p[[4]] <- DimPlot_pools(hash_well_I_SCT, reduc = "umap.harmony", ptsize = 1.5)
+p[[5]] <- DimPlot_pools(hash_well_I_SCT, reduc = "umap.cca", ptsize = 1.5)
+p[[6]] <- DimPlot_pools(hash_well_I_SCT, reduc = "umap.rpca", ptsize = 1.5)
+#hash_well_II_RNA 
+p[[7]] <- DimPlot_pools(hash_well_II_RNA, reduc = "umap.harmony", ptsize = 2)
+p[[8]] <- DimPlot_pools(hash_well_II_RNA, reduc = "umap.cca", ptsize = 2)
+p[[9]] <- DimPlot_pools(hash_well_II_RNA, reduc = "umap.rpca", ptsize = 2)
+#hash_well_II_SCT 
+p[[10]] <- DimPlot_pools(hash_well_II_SCT, reduc = "umap.harmony", ptsize = 2) 
+p[[11]] <- DimPlot_pools(hash_well_II_SCT, reduc = "umap.cca", ptsize = 2)
+p[[12]] <- DimPlot_pools(hash_well_II_SCT, reduc = "umap.rpca", ptsize = 2) 
+#hash_well_III_RNA 
+p[[13]] <- DimPlot_pools(hash_well_III_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[14]] <- DimPlot_pools(hash_well_III_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[15]] <- DimPlot_pools(hash_well_III_RNA, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_III_SCT 
+p[[16]] <- DimPlot_pools(hash_well_III_SCT, reduc = "umap.harmony", ptsize = 1.5)
+p[[17]] <- DimPlot_pools(hash_well_III_SCT, reduc = "umap.cca", ptsize = 1.5) 
+p[[18]] <- DimPlot_pools(hash_well_III_SCT, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_IV_RNA 
+p[[19]] <- DimPlot_pools(hash_well_IV_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[20]] <- DimPlot_pools(hash_well_IV_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[21]] <- DimPlot_pools(hash_well_IV_RNA, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_IV_SCT 
+p[[22]] <- DimPlot_pools(hash_well_IV_SCT, reduc = "umap.harmony", ptsize = 1.5) 
+p[[23]] <- DimPlot_pools(hash_well_IV_SCT, reduc = "umap.cca", ptsize = 1.5) 
+p[[24]] <- DimPlot_pools(hash_well_IV_SCT, reduc = "umap.rpca", ptsize = 1.5)
+#hash_well_VI_RNA 
+p[[25]] <- DimPlot_pools(hash_well_VI_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[26]] <- DimPlot_pools(hash_well_VI_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[27]] <- DimPlot_pools(hash_well_VI_RNA, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_VI_SCT 
+p[[28]] <- DimPlot_pools(hash_well_VI_SCT, reduc = "umap.harmony", ptsize = 1.5) 
+p[[29]] <- DimPlot_pools(hash_well_VI_SCT, reduc = "umap.cca", ptsize = 1.5) 
+p[[30]] <- DimPlot_pools(hash_well_VI_SCT, reduc = "umap.rpca", ptsize = 1.5)
+```
+
+Generate the UMAP figures.
+```{r}
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoAxes() + labs(title = as.character(i)) +
+  theme(plot.margin = unit(c(-0.8,-0.5,-0.6,-0.5), "lines"), plot.title = element_text(size=0)) + #
+  theme(plot.title = element_text(size=0))
+  #theme(plot.margin = unit(c(0.1,-0.2,-0.3,-0.2), "lines")) +
+  #theme(plot.title = element_text(size=20)) 
+  #+ labs(title = def_CITE[i]) 
+  #+ ggtitle("")
+}
+
+fig1 <- ggarrange(plotlist = p[1:18],ncol=3,nrow=6)
+fig2 <- ggarrange(plotlist = p[19:30],ncol=3,nrow=6)
+#plot(fig1)
+```
+
+Call the dimplot_samples function serially and generate the plot.
+```{r}
+p <- vector(mode = "list", length = 30)
+#hash_well_I_RNA 
+p[[1]] <- DimPlot_samples(hash_well_I_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[2]] <- DimPlot_samples(hash_well_I_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[3]] <- DimPlot_samples(hash_well_I_RNA, reduc = "umap.rpca", ptsize = 1.5)
+#hash_well_I_SCT 
+p[[4]] <- DimPlot_samples(hash_well_I_SCT, reduc = "umap.harmony", ptsize = 1.5)
+p[[5]] <- DimPlot_samples(hash_well_I_SCT, reduc = "umap.cca", ptsize = 1.5)
+p[[6]] <- DimPlot_samples(hash_well_I_SCT, reduc = "umap.rpca", ptsize = 1.5)
+#hash_well_II_RNA 
+p[[7]] <- DimPlot_samples(hash_well_II_RNA, reduc = "umap.harmony", ptsize = 2)
+p[[8]] <- DimPlot_samples(hash_well_II_RNA, reduc = "umap.cca", ptsize = 2)
+p[[9]] <- DimPlot_samples(hash_well_II_RNA, reduc = "umap.rpca", ptsize = 2)
+#hash_well_II_SCT 
+p[[10]] <- DimPlot_samples(hash_well_II_SCT, reduc = "umap.harmony", ptsize = 2) 
+p[[11]] <- DimPlot_samples(hash_well_II_SCT, reduc = "umap.cca", ptsize = 2)
+p[[12]] <- DimPlot_samples(hash_well_II_SCT, reduc = "umap.rpca", ptsize = 2) 
+#hash_well_III_RNA 
+p[[13]] <- DimPlot_samples(hash_well_III_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[14]] <- DimPlot_samples(hash_well_III_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[15]] <- DimPlot_samples(hash_well_III_RNA, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_III_SCT 
+p[[16]] <- DimPlot_samples(hash_well_III_SCT, reduc = "umap.harmony", ptsize = 1.5)
+p[[17]] <- DimPlot_samples(hash_well_III_SCT, reduc = "umap.cca", ptsize = 1.5) 
+p[[18]] <- DimPlot_samples(hash_well_III_SCT, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_IV_RNA 
+p[[19]] <- DimPlot_samples(hash_well_IV_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[20]] <- DimPlot_samples(hash_well_IV_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[21]] <- DimPlot_samples(hash_well_IV_RNA, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_IV_SCT 
+p[[22]] <- DimPlot_samples(hash_well_IV_SCT, reduc = "umap.harmony", ptsize = 1.5) 
+p[[23]] <- DimPlot_samples(hash_well_IV_SCT, reduc = "umap.cca", ptsize = 1.5) 
+p[[24]] <- DimPlot_samples(hash_well_IV_SCT, reduc = "umap.rpca", ptsize = 1.5)
+#hash_well_VI_RNA 
+p[[25]] <- DimPlot_samples(hash_well_VI_RNA, reduc = "umap.harmony", ptsize = 1.5) 
+p[[26]] <- DimPlot_samples(hash_well_VI_RNA, reduc = "umap.cca", ptsize = 1.5) 
+p[[27]] <- DimPlot_samples(hash_well_VI_RNA, reduc = "umap.rpca", ptsize = 1.5) 
+#hash_well_VI_SCT 
+p[[28]] <- DimPlot_samples(hash_well_VI_SCT, reduc = "umap.harmony", ptsize = 1.5) 
+p[[29]] <- DimPlot_samples(hash_well_VI_SCT, reduc = "umap.cca", ptsize = 1.5) 
+p[[30]] <- DimPlot_samples(hash_well_VI_SCT, reduc = "umap.rpca", ptsize = 1.5)
+```
+
+Generate the UMAP figures.
+```{r}
+for(i in 1:length(p)) {
+  p[[i]] <- p[[i]] + NoAxes() + labs(title = as.character(i)) +
+  theme(plot.margin = unit(c(-0.8,-0.5,-0.6,-0.5), "lines"), plot.title = element_text(size=0)) + #
+  theme(plot.title = element_text(size=0))
+  #theme(plot.margin = unit(c(0.1,-0.2,-0.3,-0.2), "lines")) +
+  #theme(plot.title = element_text(size=20)) 
+  #+ labs(title = def_CITE[i]) 
+  #+ ggtitle("")
+}
+
+fig1 <- ggarrange(plotlist = p[1:18],ncol=3,nrow=6)
+fig2 <- ggarrange(plotlist = p[19:30],ncol=3,nrow=6)
+#plot(fig1)
+```
+
+UMAP for setup V.
+```{r}
+plot1 <- DimPlot_samples(hash_well_V_RNA, reduc = "umap.unint", ptsize = 2) 
+```
+
+
+
+
+
+
+
+
+
