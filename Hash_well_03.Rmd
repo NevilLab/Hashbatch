@@ -394,24 +394,24 @@ Carry out singleR rough annotation for all clustering layers.
 Write a common function first.
 ```{r}
 #UMAPannote <- function(Object, Ref, Clusters, new_meta, reduc) 
-Object <- hash_well_I_RNA
-Ref <- ref1
-Clusters <- "cca_clusters"
-new_meta <- "cca_annotation"
-reduc <- "umap.cca"
+#Object <- hash_well_I_RNA
+#Ref <- ref1
+#Clusters <- "cca_clusters"
+#new_meta <- "cca_annotation"
+#reduc <- "umap.cca"
 
 #ref <- celldex::ImmGenData()
 #ref1 <- as.data.frame(colData(ref))
 
 #Object_counts <- GetAssayData(Object@assays$RNA, layer = 'counts') 
-Object_counts <- LayerData(Object@assays$RNA, layer = 'counts')
-Annotes1 <- SingleR(test = as.matrix(Object_counts), ref = Ref, clusters = Object[[Clusters]], labels = Ref$label.main)
+#Object_counts <- LayerData(Object@assays$RNA, layer = 'counts')
+#Annotes1 <- SingleR(test = as.matrix(Object_counts), ref = Ref, clusters = Object[[Clusters]], labels = #Ref$label.main)
 
-Object[[new_meta]] <- Annotes1@listData$labels[match(Object[[Clusters]],rownames(Annotes1))]
+#Object[[new_meta]] <- Annotes1@listData$labels[match(Object[[Clusters]],rownames(Annotes1))]
 
 # plot
-plots1 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = new_meta, label = FALSE, label.size = 7, repel = TRUE)
-plots2 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = "orig.ident", label = FALSE, label.size = 7, repel = TRUE)
+#plots1 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = new_meta, label = FALSE, label.size = 7, #repel = TRUE)
+#plots2 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = "orig.ident", label = FALSE, label.size #= 7, repel = TRUE)
 #print(plots1)
 ```
 ```{r}

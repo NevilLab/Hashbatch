@@ -1,0 +1,258 @@
+Figure 2.
+
+Load packages.
+```{r message=FALSE}
+library(Seurat)
+library(hdf5r)
+library(openxlsx)
+library(stringr)
+library(purrr)
+library(ggplot2)
+library(ggpubr)
+
+#library(future)
+#options(future.globals.maxSize = 50*1e9)
+
+options(Seurat.object.assay.version = 'v5')
+
+Total <- c() # Total number of cells
+After_cleanup <- c() # After mito/feature/count clean up 
+After_demux <- c() # After cleanup and demultiplexing
+po_ol <- c() # keep a record of the tissue
+idx <- c() # Record index
+```
+
+Read up all files, demultiplex, and save in a list.
+```{r}
+setwd("../hash_well_data")
+labl_hsh <- read.xlsx('HW_des.xlsx')
+ind_adt <- read.xlsx('adt_ind.xlsx', colNames = FALSE)
+
+atoms <- list()
+n <- 1
+G_D_E <- c()
+I_H_E <- list()
+Dual_GDE <- c()
+Vlns_count <- list()
+Vlns_feature <- list()
+Q3D_c <- c()
+Q3D_f <- c()
+setwd('./h5')
+for (j in 1:6) { #:16
+  D.data <- Read10X_h5(paste('./', labl_hsh$Label[j], '.h5', sep = ""))
+  k1 <- str_split(labl_hsh$hashtags_pick[j], " ") # pick up the hashes
+  k2 <- as.numeric(k1[[1]])
+  k3 <- str_split(ind_adt[1,1], ", ") # pick up the ADT indexes
+  k4 <- as.numeric(k3[[1]])
+  
+  rna.counts <- D.data$`Gene Expression` # Call the data
+  hto.counts <- D.data$`Antibody Capture`[k2 + 192, ]
+  adt.counts <- D.data$`Antibody Capture`[k4, ] 
+  
+  D.data.joint <- intersect(colnames(rna.counts), colnames(hto.counts)) # Make sure overlapping counts are called
+  D.data.joint <- intersect(colnames(rna.counts), colnames(adt.counts))
+  rna.counts <- rna.counts[, D.data.joint]
+  hto.counts <- hto.counts[, D.data.joint]
+  adt.counts <- adt.counts[, D.data.joint]
+  
+  # Create Seurat object
+  D <- CreateSeuratObject(counts = rna.counts, project = labl_hsh[j,1], assay = "RNA") # Create Seurat object
+  D[["percent.mt"]] <- PercentageFeatureSet(D, pattern = "^mt-")
+  
+  D[["HTO"]] <- CreateAssayObject(counts = hto.counts)
+  D <- NormalizeData(D, assay = "HTO", normalization.method = "CLR", verbose = FALSE) # Normalise the HTO
+  D[["ADT"]] <- CreateAssayObject(counts = adt.counts)
+  D <- NormalizeData(D, assay = "ADT", normalization.method = "CLR", verbose = TRUE) # NOrmalise ADT
+  
+  # Record the total number of cells
+  Total <- c(Total, dim(D)[2])
+  
+  # Rename cells to avoid future conflicts
+  dataset_name <- paste(labl_hsh[j,4], labl_hsh[j,1], sep = "_")
+  D$dataset <- dataset_name
+  D <- RenameCells(object = D, add.cell.id = dataset_name)
+  
+  # Cleanup 
+  D <- subset(D, subset = nFeature_RNA > 500 & nFeature_RNA < 3000 & percent.mt < 2.5 & nCount_RNA < 20000) 
+  
+  # Record the number of cells after cleanup
+  After_cleanup <- c(After_cleanup, dim(D)[2])
+  
+  # Demultiplexing (Seurat)
+  D <- HTODemux(D, assay = "HTO", verbose = TRUE) # Demultiplex positive.quantile is at default
+  
+  # violin plot of read depth
+  ggdf <- data.frame(D$HTO_classification.global, D$nCount_RNA)
+  colnames(ggdf) <- c("hash_class", "reads")
+  Vlns_count[[j]] <- ggplot(ggdf, aes(hash_class, reads)) + geom_violin() +
+  geom_boxplot(width=0.1, fill="white", outlier.size = 0.3) +
+  stat_summary(fun=mean, geom="point", shape=20, size=3, color="black", fill="black") +
+  theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank())#,
+  #axis.text = element_blank()) +
+  #theme(axis.title = element_blank())
+  
+  ggdf <- data.frame(D$HTO_classification.global, D$nFeature_RNA)
+  colnames(ggdf) <- c("hash_class", "reads")
+  Vlns_feature[[j]] <- ggplot(ggdf, aes(hash_class, reads)) + geom_violin() +
+  geom_boxplot(width=0.1, fill="white", outlier.size = 0.3) +
+  stat_summary(fun=mean, geom="point", shape=20, size=3, color="black", fill="black") +
+  theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank())#,
+  #axis.text = element_blank()) +
+  #theme(axis.title = element_blank())
+  
+  # Pickup Seurat hash thresholds
+  quiet_demux <- quietly(HTODemux)
+  b <- quiet_demux(D)
+  Seurat_thresh <- c()
+  for (p in 1:length(b$messages)) {
+    temp_string <- str_split(b$messages[p], " ")
+    Seurat_thresh <- c(Seurat_thresh, as.numeric(temp_string[[1]][5]))
+  }
+  # Global demux efficacy (GDE) <- singlet/all
+  temp_table <- table(D$HTO_classification.global)
+  GDE <- temp_table[["Singlet"]]/dim(D)[2]
+  
+  # Individual hash efficiency (IHE) <- hash_singlet/hash_positive
+  
+  hto_data <- GetAssayData(object = D, assay = "HTO", layer = "count")
+  hash_positive <- c()
+  for (q in 1:length(Seurat_thresh)) {
+    hash_positive <- c(hash_positive, length(which(hto_data[q,] > Seurat_thresh[q])))
+  }
+  
+  Idents(D) <- "HTO_classification.global" 
+  D.singlet <- subset(D, idents = "Singlet")
+  D.doublet <- subset(D, idents = "Doublet")
+  
+  # Multiples below 3rd Q of singlets
+  Q3_c <- quantile(D.singlet$nCount_RNA, probs = 0.75)
+  Q3_f <- quantile(D.singlet$nFeature_RNA, probs = 0.75)
+  
+  Q3D_c <- c(Q3D_c, (length(which(D.doublet$nCount_RNA > Q3_c))/length(D.doublet$nCount_RNA))*100)
+  Q3D_f <- c(Q3D_f,(length(which(D.doublet$nFeature_RNA > Q3_f))/length(D.doublet$nFeature_RNA))*100)
+  
+  # IHE
+  hash_singlet <- c()
+  hto_data <- GetAssayData(object = D.singlet, assay = "HTO", layer = "count")
+  for (q in 1:length(Seurat_thresh)) {
+    hash_singlet <- c(hash_singlet, length(which(hto_data[q,] > Seurat_thresh[q])))
+  }
+  
+  IHE <- hash_singlet/hash_positive
+  
+  # Collect GDE and IHE
+  G_D_E <- c(G_D_E, GDE)
+  I_H_E[[n]] <- IHE 
+  
+  # Calculate the gde and ihe for four hash batches considering them two hash
+  if (j < 16) {
+  hto_dual_data <- GetAssayData(object = D, assay = "HTO", layer = "count")
+  hash_dual <- as.matrix(t(hto_dual_data))
+  for (q in 1:length(Seurat_thresh)) {
+    hash_dual[,q] <- as.numeric(hto_dual_data[q,] > Seurat_thresh[q])
+  }
+  
+  # merge first two and the next two hashes
+  hash_dual_1 <- hash_dual[,1] + hash_dual[,2]
+  hash_dual_2 <- hash_dual[,3] + hash_dual[,4]
+  
+  # find singlets, doublets and negatives
+  negative <- c()
+  singlet <- c()
+  multiplet <- c()
+  for (m in 1:length(hash_dual_2)) {
+    if (hash_dual_1[m]>0) {
+      if (hash_dual_2[m]>0) {
+        multiplet <- c(multiplet, m)
+      }
+    }
+    if (hash_dual_1[m]==0) {
+     if (hash_dual_2[m]>0) {
+      singlet <- c(singlet, m)
+    }
+    }
+    if (hash_dual_1[m]>0) {
+     if (hash_dual_2[m]==0) {
+      singlet <- c(singlet, m)
+    }
+    }
+    if (hash_dual_1[m]==0) {
+    if  (hash_dual_2[m]==0) {
+      negative <- c(negative, m)
+    }
+    }
+  }
+  
+  dual_GDE <- length(singlet)/(length(singlet)+length(multiplet)+length(negative))
+  Dual_GDE <- c(Dual_GDE, dual_GDE)
+  }
+  #IHE <- hash_singlet/hash_positive
+  
+  # Record the number of cells after demultiplexing
+  After_demux <- c(After_demux, dim(D.singlet)[2])
+  
+  # Annotate samples on tissue
+  D@meta.data$pool = labl_hsh[j,4]
+  
+  #Keep the demultiplexed, normalized data in the list
+  atoms[[n]] <- D
+  n <- n + 1
+
+  po_ol <- c(po_ol, labl_hsh[j,4]) # keep a record of the pool
+  idx <- c(idx, labl_hsh[j,1]) # Record index
+  
+}
+```
+
+Make bar plots of GDE.
+```{r}
+GDE_data <- data.frame(Well <- 1:6, GDE_data <- G_D_E)
+colnames(GDE_data) <- c("Well", "GDE")
+ggplot(GDE_data, aes(x=Well, y=GDE)) +
+  geom_segment( aes(x=Well, xend=Well, y=0, yend=GDE)) +
+  geom_point( size=5, color="red", fill=alpha("orange", 0.3), alpha=0.7, shape=21, stroke=2) +
+  ylim(c(0,1)) + theme_bw() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = 1:6)
+
+GDE_all_data <- data.frame(Well <- 1:13, GDE_data <- c(Dual_GDE[1:5],-1,  G_D_E[1:5], -1, G_D_E[6]))
+colnames(GDE_all_data) <- c("Well", "GDE")
+ggplot(GDE_all_data, aes(x=Well, y=GDE)) +
+  geom_segment( aes(x=Well, xend=Well, y=0, yend=GDE)) +
+  geom_point( size=5, color="red", fill=alpha("orange", 0.3), alpha=0.7, shape=21, stroke=2) +
+  ylim(c(0,1)) + theme_bw() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = 1:13)
+```
+
+Make box plots of IHE.
+```{r}
+IHE_data <- data.frame(IHE_Data <- I_H_E[[1]], Well <- rep(1, length(I_H_E[[1]])))
+row.names(IHE_data) <- NULL
+colnames(IHE_data)  <- c("IHE", "Well")
+for (f in 2:length(I_H_E)) { #
+  temp_IHE <- data.frame(IHE_Data <- I_H_E[[f]], Well <- rep(f, length(I_H_E[[f]])))
+  row.names(temp_IHE) <- NULL
+  colnames(temp_IHE) <- c("IHE", "Well")
+  IHE_data <- rbind(IHE_data, temp_IHE)
+}
+
+ggplot(IHE_data, aes(x=Well, y=IHE, group = Well)) + 
+  geom_boxplot() + geom_jitter(shape=16, position=position_jitter(0.2)) + theme_bw() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = 1:6)
+```
+
+Violin plots os reads and features.
+```{r}
+ggarrange(plotlist = Vlns_count, nrow = 2, ncol = 3)
+ggarrange(plotlist = Vlns_feature, nrow = 2, ncol = 3)
+```
+

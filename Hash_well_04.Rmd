@@ -1,0 +1,443 @@
+This markdown carries out the DESeq analysis of the different wells from setup II.
+The purpose is to show that there is no remarkable difference between the wells when looking at the same samples, i.e., no serious batch effects.
+
+Then it carris out DESeq between samples alpha (baseline) and the rest of the samples (beta, gamma, delta, zeta, epsilon).
+This comparison happens in IV and V to show that the differences are barely subject to batch effects.
+
+Carrying out some downstream functional analysis (GO) completes the analysis.
+
+Load packages.
+```{r message=FALSE}
+library(Seurat)
+library(DESeq2)
+library(ggplot2)
+library(ggrepel)
+library(ggpubr)
+```
+
+Load data.
+```{r message=FALSE, warning=FALSE}
+setwd("C:/Users/budha/Documents/R2/Hash_Batch/SObjects")
+hash_well_II_RNA <- readRDS("hash_well_II_RNA.RDS")
+
+hash_well_IV_RNA <- readRDS("hash_well_IV_RNA.RDS")
+
+hash_well_V_RNA <- readRDS("hash_well_V_RNA.RDS")
+```
+
+Carry out overall pseudobulking for DESeq.
+Assign well metadata.
+```{r}
+hash_well_II_aggre <- AggregateExpression(hash_well_II_RNA, assays = "RNA", slot = "count", return.seurat = TRUE,
+                                         group.by = "orig.id")
+hash_well_IV_aggre <- AggregateExpression(hash_well_IV_RNA, assays = "RNA", slot = "count", return.seurat = TRUE,
+                                         group.by = "orig.id")
+hash_well_V_aggre <- AggregateExpression(hash_well_V_RNA, assays = "RNA", slot = "count", return.seurat = TRUE,
+                                         group.by = "orig.id")
+```
+
+Function for assigning pool info.
+```{r}
+assign_well_info <- function(object) {
+well <- c()
+for (j in object$orig.id) {
+  well <- c(well, substr(j, 1, 1))
+}
+object$well_info <- well
+return(object)
+}
+```
+
+Function for assigning hash and sample info.
+```{r}
+assign_sample_info <- function(object) {
+hash <- c()
+for (j in object$orig.id) {
+  hash <- c(hash, as.numeric(substr(j, 3, 4)))
+}
+object$hash_info <- hash
+
+sample <- c()
+for (i in object$hash_info) {
+  if (i %in% c(1,2)) {
+    sample <- c(sample, "alpha")
+    next
+  }
+  if (i %in% c(3,4)) {
+    sample <- c(sample, "beta")
+    next
+  }
+  if (i %in% c(5,6)) {
+    sample <- c(sample, "gamma")
+    next
+  }
+  if (i %in% c(7,8)) {
+    sample <- c(sample, "delta")
+    next
+  }
+  if (i %in% c(9,12)) {
+    sample <- c(sample, "epsilon")
+    next
+  }
+  if (i %in% c(13,14)) {
+    sample <- c(sample, "zeta")
+    next
+  }
+}
+
+object$sample <- sample
+return(object)
+}
+```
+
+Assign pool, hash and sample info.
+```{r}
+hash_well_II_aggre <- assign_well_info(hash_well_II_aggre)
+hash_well_IV_aggre <- assign_well_info(hash_well_IV_aggre)
+hash_well_V_aggre <- assign_well_info(hash_well_V_aggre)
+
+hash_well_II_aggre <- assign_sample_info(hash_well_II_aggre)
+hash_well_IV_aggre <- assign_sample_info(hash_well_IV_aggre)
+hash_well_V_aggre <- assign_sample_info(hash_well_V_aggre)
+```
+
+Clear memory.
+```{r}
+rm(hash_well_II_RNA, hash_well_IV_RNA, hash_well_V_RNA)
+```
+
+
+Write a function for carrying out DESeq.
+```{r}
+DESeq_shortcut <- function(object, currentIdent, currentAssay, identctrl, identtest) {
+#object <- hash_well_II_aggre
+#currentIdent <- "well_info" 
+#currentAssay <- "RNA"
+#identctrl = "A" # control
+#identtest = "B" 
+
+Idents(object) <- currentIdent
+DefaultAssay(object) <- currentAssay
+
+cells1 <- WhichCells(object = object, idents = identctrl) # control
+cells2 <- WhichCells(object = object, idents = identtest)
+
+# deseq group info
+group.info <- data.frame(row.names = c(cells1, cells2))
+group.info[cells1, "group"] <- "Group1" # control
+group.info[cells2, "group"] <- "Group2" 
+group.info[, "group"] <- factor(x = group.info[, "group"])
+group.info$wellKey <- rownames(x = group.info)
+
+# data matrix
+data.use <-  GetAssayData(object = object, slot = "count")
+data.use <- data.use[, rownames(x = group.info), drop = FALSE]
+
+# Execute DESeq
+dds1 <- DESeq2::DESeqDataSetFromMatrix(
+countData = data.use,
+colData = group.info,
+design = ~ group
+)
+dds1 <- DESeq(dds1, fitType = "local", quiet = TRUE)
+
+# Benjamini
+res_BH <- DESeq2::results(
+object = dds1,
+pAdjustMethod = "bonferroni" #"BH"
+#contrast = c("group", "Group1", "Group2"),
+#alpha = 0.05,
+)
+
+# Fold change shrinking
+resLFC <- lfcShrink(dds1, coef = resultsNames(dds1)[2], type = "apeglm", quiet = TRUE)
+
+# generate result data frames
+# Benjamini
+to.return.ben <- data.frame()
+to.return.ben <- data.frame(genes = rownames(res_BH), 
+                            baseline = res_BH$baseMean, fc = res_BH$log2FoldChange, 
+                            LFC_sh = resLFC$log2FoldChange,
+                            p_val = res_BH$pvalue, p_adj = res_BH$padj)
+
+# remove NA
+to.return.ben <- to.return.ben[-which(is.na(to.return.ben$p_adj)),]
+
+return(to.return.ben)
+}
+```
+Define a function which generates the volcano plots.
+```{r}
+volc_single <- function(input_n, padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text) {
+#input_n <- spleen_T4em_VIPEXv
+#padj_thresh <- 0.05
+#fc_thresh <- 1
+#padj_col <- 8
+#fc_col <- 2
+#id_col <- 1
+#text_padj_thresh <- 0.01
+#text_fc_thresh <- 2
+
+input_nn<-data.frame(input_n, "Sig"<-replicate(dim(input_n)[1],"important"),
+                  row.names = NULL,stringsAsFactors = FALSE)
+
+#===============================================================================
+colnames(input_nn)<-c(colnames(input_n),"Sig")
+#===============================================================================
+entry_col <- dim(input_nn)[2]
+for (d in 1:dim(input_nn)[1]) {
+  if (input_nn[d,padj_col]>padj_thresh) {
+    input_nn[d,entry_col]<-"unimportant1"
+  }
+  if (input_nn[d,fc_col]<fc_thresh) {
+    if (input_nn[d,fc_col]>-fc_thresh) {
+      input_nn[d,entry_col]<-"unimportant2"
+    }
+  }
+  if (input_nn[d,padj_col]>padj_thresh) {
+    if (input_nn[d,fc_col]<fc_thresh) {
+      if (input_nn[d,fc_col]>-fc_thresh) {
+        input_nn[d,entry_col]<-"unimportant"
+      }
+    }
+  }
+}
+#==================================================================================
+input_nn<-input_nn[order(input_nn[,fc_col], decreasing = TRUE),]
+#==================================================================================
+G<-which(input_nn$Sig=="important")
+H<-which(input_nn[,fc_col]>text_fc_thresh)
+J<-which(input_nn[,fc_col]<(-text_fc_thresh))
+X<-which(input_nn[,padj_col]<text_padj_thresh)
+
+I1_1<-intersect(H,G)
+I1_2<-intersect(J,G)
+
+I1_1<-intersect(I1_1,X)
+I1_2<-intersect(I1_2,X)
+
+I1<-c(I1_1,I1_2)
+
+input_nnn<-data.frame(input_nn, "Symbol2"<-input_nn[,id_col],
+                  row.names = NULL,stringsAsFactors = FALSE)
+
+colnames(input_nnn)<-c(colnames(input_nn), "Symbol2")
+
+I1_diff = setdiff(1:dim(input_nnn)[1],I1)
+for (k in I1_diff) {
+  input_nnn$Symbol2[k] <- ""
+}
+
+if (text == "Y") {
+volc1 = ggplot(input_nnn, aes(input_nnn[,fc_col], -log10(input_nnn[,padj_col]))) + #volcanoplot with log2Foldchange versus pvalue
+  geom_point(aes(col=Sig)) + #add points colored by significance
+  geom_vline(xintercept = -fc_thresh,linetype="dashed", size = 0.5) + 
+  geom_vline(xintercept = fc_thresh,linetype="dashed", size = 0.5) + 
+  geom_hline(yintercept = -log10(padj_thresh),linetype="dashed", size = 0.5) +
+  scale_color_manual(values=c("green4","black","yellow4","blue4")) + 
+  theme_bw(base_rect_size = 2) +  #+ ylim(-.1,7.5) +# xlim(-6, 6)
+  theme(panel.grid.major = element_blank(),  # Remove major grid lines
+  panel.grid.minor = element_blank()) +
+  NoLegend() +
+  geom_text_repel(data=input_nnn,
+                  aes(label=Symbol2), 
+                  box.padding = 0.25,
+                  show.legend = FALSE) 
+}
+if (text == "N") {
+  volc1 = ggplot(input_nnn, aes(input_nnn[,fc_col], -log10(input_nnn[,padj_col]))) + #volcanoplot with log2Foldchange versus pvalue
+  geom_point(aes(col=Sig)) + #add points colored by significance
+  geom_vline(xintercept = -fc_thresh,linetype="dashed", size = 0.5) + 
+  geom_vline(xintercept = fc_thresh,linetype="dashed", size = 0.5) + 
+  geom_hline(yintercept = -log10(padj_thresh),linetype="dashed", size = 0.5) +
+  scale_color_manual(values=c("green4","black","yellow4","blue4")) + 
+  theme_bw(base_rect_size = 2) +  #+ ylim(-.1,7.5) +# xlim(-6, 6)
+  theme(panel.grid.major = element_blank(),  # Remove major grid lines
+  panel.grid.minor = element_blank()) +
+  NoLegend()
+}
+return(volc1)
+}
+```
+
+Carry out DESeq for II.
+```{r}
+hash_well_II_AB_deSeq <- DESeq_shortcut(object <- hash_well_II_aggre, 
+                           currentIdent <- "well_info", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "A", 
+                           identtest <- "B")
+hash_well_II_AC_deSeq <- DESeq_shortcut(object <- hash_well_II_aggre, 
+                           currentIdent <- "well_info", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "A", 
+                           identtest <- "C")
+hash_well_II_AD_deSeq <- DESeq_shortcut(object <- hash_well_II_aggre, 
+                           currentIdent <- "well_info", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "A", 
+                           identtest <- "D")
+hash_well_II_AE_deSeq <- DESeq_shortcut(object <- hash_well_II_aggre, 
+                           currentIdent <- "well_info", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "A", 
+                           identtest <- "E")  
+hash_well_II_AF_deSeq <- DESeq_shortcut(object <- hash_well_II_aggre, 
+                           currentIdent <- "well_info", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "A", 
+                           identtest <- "F")  
+```
+Create the volcano plots for setup II.
+```{r}
+padj_thresh <- 0.05
+fc_thresh <- 1
+padj_col <- 6
+fc_col <- 4
+id_col <- 1
+text_padj_thresh <- 0.05
+text_fc_thresh <- 1
+text <- "Y"
+
+hash_well_II_AB_volcplot <- volc_single(input_n <- hash_well_II_AB_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_II_AC_volcplot <- volc_single(input_n <- hash_well_II_AC_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_II_AD_volcplot <- volc_single(input_n <- hash_well_II_AD_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_II_AE_volcplot <- volc_single(input_n <- hash_well_II_AE_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_II_AF_volcplot <- volc_single(input_n <- hash_well_II_AF_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+
+fig1 <- ggarrange(hash_well_II_AB_volcplot, 
+                  hash_well_II_AC_volcplot,
+                  hash_well_II_AD_volcplot,
+                  hash_well_II_AE_volcplot,
+                  hash_well_II_AF_volcplot, ncol=1, nrow=5)
+```
+
+Assign sample-well metadata in IV.
+Then carry out DESeq for setup IV.
+```{r}
+hash_well_IV_aggre$well_sample <- paste(hash_well_IV_aggre$well_info,hash_well_IV_aggre$sample, sep = "_")
+
+hash_well_IV_alphabeta_deSeq <- DESeq_shortcut(object <- hash_well_IV_aggre, 
+                           currentIdent <- "well_sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "A_alpha", 
+                           identtest <- "A_beta")
+hash_well_IV_alphagamma_deSeq <- DESeq_shortcut(object <- hash_well_IV_aggre, 
+                           currentIdent <- "well_sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "B_alpha", 
+                           identtest <- "B_gamma")
+hash_well_IV_alphadelta_deSeq <- DESeq_shortcut(object <- hash_well_IV_aggre, 
+                           currentIdent <- "well_sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "C_alpha", 
+                           identtest <- "C_delta")
+hash_well_IV_alphaepsilon_deSeq <- DESeq_shortcut(object <- hash_well_IV_aggre, 
+                           currentIdent <- "well_sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "D_alpha", 
+                           identtest <- "D_epsilon")
+hash_well_IV_alphazeta_deSeq <- DESeq_shortcut(object <- hash_well_IV_aggre, 
+                           currentIdent <- "well_sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "E_alpha", 
+                           identtest <- "E_zeta")
+```
+
+Create the volcano plots for setup IV.
+```{r}
+hash_well_IV_alphabeta_volcplot <- volc_single(input_n <- hash_well_IV_alphabeta_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_IV_alphagamma_volcplot <- volc_single(input_n <- hash_well_IV_alphagamma_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_IV_alphadelta_volcplot <- volc_single(input_n <- hash_well_IV_alphadelta_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_IV_alphaepsilon_volcplot <- volc_single(input_n <- hash_well_IV_alphaepsilon_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_IV_alphazeta_volcplot <- volc_single(input_n <- hash_well_IV_alphazeta_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+
+fig2 <- ggarrange(hash_well_IV_alphabeta_volcplot, 
+                  hash_well_IV_alphagamma_volcplot,
+                  hash_well_IV_alphadelta_volcplot,
+                  hash_well_IV_alphaepsilon_volcplot,
+                  hash_well_IV_alphazeta_volcplot, ncol=1, nrow=5)
+```
+
+Carry out DESeq for setup V.
+```{r}
+hash_well_V_alphabeta_deSeq <- DESeq_shortcut(object <- hash_well_V_aggre, 
+                           currentIdent <- "sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "alpha", 
+                           identtest <- "beta")
+hash_well_V_alphagamma_deSeq <- DESeq_shortcut(object <- hash_well_V_aggre, 
+                           currentIdent <- "sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "alpha", 
+                           identtest <- "gamma")
+hash_well_V_alphadelta_deSeq <- DESeq_shortcut(object <- hash_well_V_aggre, 
+                           currentIdent <- "sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "alpha", 
+                           identtest <- "delta")
+hash_well_V_alphaepsilon_deSeq <- DESeq_shortcut(object <- hash_well_V_aggre, 
+                           currentIdent <- "sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "alpha", 
+                           identtest <- "epsilon")
+hash_well_V_alphazeta_deSeq <- DESeq_shortcut(object <- hash_well_V_aggre, 
+                           currentIdent <- "sample", 
+                           currentAssay <- "RNA", 
+                           identctrl <- "alpha", 
+                           identtest <- "zeta")
+```
+
+Create the volcano plots for setup V.
+```{r}
+hash_well_V_alphabeta_volcplot <- volc_single(input_n <- hash_well_V_alphabeta_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_V_alphagamma_volcplot <- volc_single(input_n <- hash_well_V_alphagamma_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_V_alphadelta_volcplot <- volc_single(input_n <- hash_well_V_alphadelta_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_V_alphaepsilon_volcplot <- volc_single(input_n <- hash_well_V_alphaepsilon_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+hash_well_V_alphazeta_volcplot <- volc_single(input_n <- hash_well_V_alphazeta_deSeq, 
+                                        padj_thresh, fc_thresh, padj_col, fc_col, id_col, text_padj_thresh, text_fc_thresh, text)
+
+fig3 <- ggarrange(hash_well_V_alphabeta_volcplot, 
+                  hash_well_V_alphagamma_volcplot,
+                  hash_well_V_alphadelta_volcplot,
+                  hash_well_V_alphaepsilon_volcplot,
+                  hash_well_V_alphazeta_volcplot, ncol=1, nrow=5)
+```
+
+Genes for GO analysis.
+```{r}
+hash_well_II_AB_deSeq_go <- hash_well_II_AB_deSeq[which(hash_well_II_AB_deSeq$p_adj < 0.05),]
+hash_well_II_AB_deSeq_go <- hash_well_II_AB_deSeq_go[which(hash_well_II_AB_deSeq_go$LFC_sh > 1),]
+
+hash_well_II_AD_deSeq_go <- hash_well_II_AD_deSeq[which(hash_well_II_AD_deSeq$p_adj < 0.05),]
+hash_well_II_AD_deSeq_go <- hash_well_II_AD_deSeq_go[which(hash_well_II_AD_deSeq_go$LFC_sh > 1),]
+
+hash_well_II_AF_deSeq_go <- hash_well_II_AF_deSeq[which(hash_well_II_AF_deSeq$p_adj < 0.05),]
+hash_well_II_AF_deSeq_go <- hash_well_II_AF_deSeq_go[which(hash_well_II_AF_deSeq_go$LFC_sh > 1),]
+
+hash_well_V_alphabeta_deSeq_go <- hash_well_V_alphabeta_deSeq[which(hash_well_V_alphabeta_deSeq$p_adj < 0.05),]
+hash_well_V_alphabeta_deSeq_go <- hash_well_V_alphabeta_deSeq_go[which(hash_well_V_alphabeta_deSeq_go$LFC_sh > 1),] 
+
+hash_well_IV_alphabeta_deSeq_go <- hash_well_IV_alphabeta_deSeq[which(hash_well_IV_alphabeta_deSeq$p_adj < 0.05),]
+hash_well_IV_alphabeta_deSeq_go <- hash_well_IV_alphabeta_deSeq_go[which(hash_well_IV_alphabeta_deSeq_go$LFC_sh > 1),] 
+```
+
+
+
+
+
+
