@@ -11,7 +11,7 @@ library(ggpubr)
 
 Load the batch effect data frames.
 ```{r}
-setwd("C:/Users/budha/Documents/R2/Hash_Batch/BEffects")
+setwd("../hash_well_data/BEffects1")
 HW_BE_I <- readRDS("HW_BE_I.RDS")
 HW_BE_II <- readRDS("HW_BE_II.RDS")
 HW_BE_III <- readRDS("HW_BE_III.RDS")
@@ -108,18 +108,6 @@ for (n in 1:3) {
   #theme(plot.margin = margin(t = .1, r = .1, b = .6, l = .1, unit = "cm"))
   #}
   
-  #if (metric == "LocStr") {
-  #plot_list[[n]] <- ggplot(ggplotlist[[metadata[n]]], 
-  #                       aes(setup, .data[[colnames(ggplotlist[[metadata[n]]])[1]]], fill = setup)) + 
-  #geom_boxplot(width=0.4, outlier.size = 0.3) +
-  #stat_summary(fun=mean, geom="point", shape=20, size=3, color="black", fill="black") +
-  #scale_fill_manual(values = colour) +
-  #theme_bw() + NoLegend() +
-  #theme(panel.grid.major = element_blank(),
-  #panel.grid.minor = element_blank(),
-  #axis.text = element_blank()) +
-  #theme(axis.title = element_blank()) + ylim(c(0, 1))
-  #}
 }
 
 plot <- ggarrange(plotlist = plot_list, nrow = 1, ncol = 3)
@@ -192,17 +180,10 @@ RNA_harmony_entropy <- Int_plot(layer <- "RNA", reduc <- "harmony", metric <- "e
 RNA_cca_entropy <- Int_plot(layer <- "RNA", reduc <- "cca", metric <- "entropy")
 RNA_rpca_entropy <- Int_plot(layer <- "RNA", reduc <- "rpca", metric <- "entropy")
 
-#RNA_harmony_LocStr <- Int_plot(layer <- "RNA", reduc <- "harmony", metric <- "LocStr")
-#RNA_cca_LocStr <- Int_plot(layer <- "RNA", reduc <- "cca", metric <- "LocStr")
-#RNA_rpca_LocStr <- Int_plot(layer <- "RNA", reduc <- "rpca", metric <- "LocStr")
 
 SCT_harmony_entropy <- Int_plot(layer <- "SCT", reduc <- "harmony", metric <- "entropy")
 SCT_cca_entropy <- Int_plot(layer <- "SCT", reduc <- "cca", metric <- "entropy")
 SCT_rpca_entropy <- Int_plot(layer <- "SCT", reduc <- "rpca", metric <- "entropy")
-
-#SCT_harmony_LocStr <- Int_plot(layer <- "SCT", reduc <- "harmony", metric <- "LocStr")
-#SCT_cca_LocStr <- Int_plot(layer <- "SCT", reduc <- "cca", metric <- "LocStr")
-#SCT_rpca_LocStr <- Int_plot(layer <- "SCT", reduc <- "rpca", metric <- "LocStr")
 ```
 
 Know the medians of sample entropy and pool entropy in V and II respectively.
@@ -368,11 +349,6 @@ ggplot(bar_sample_data, aes(serial, bar_sample, fill = setup)) + geom_bar(stat="
   theme(axis.title = element_blank()) + scale_y_continuous(breaks = c(25,50))
 ```
 
-Load packages.
-```{r message=FALSE}
-library(celldex)
-library(SingleR)
-```
 
 Load the Seurat objects.
 ```{r message=FALSE}
@@ -390,30 +366,7 @@ hash_well_VI_RNA <- readRDS("hash_well_VI_RNA.RDS")
 hash_well_VI_SCT <- readRDS("hash_well_VI_SCT.RDS")
 ```
 
-Carry out singleR rough annotation for all clustering layers.
-Write a common function first.
-```{r}
-#UMAPannote <- function(Object, Ref, Clusters, new_meta, reduc) 
-#Object <- hash_well_I_RNA
-#Ref <- ref1
-#Clusters <- "cca_clusters"
-#new_meta <- "cca_annotation"
-#reduc <- "umap.cca"
 
-#ref <- celldex::ImmGenData()
-#ref1 <- as.data.frame(colData(ref))
-
-#Object_counts <- GetAssayData(Object@assays$RNA, layer = 'counts') 
-#Object_counts <- LayerData(Object@assays$RNA, layer = 'counts')
-#Annotes1 <- SingleR(test = as.matrix(Object_counts), ref = Ref, clusters = Object[[Clusters]], labels = #Ref$label.main)
-
-#Object[[new_meta]] <- Annotes1@listData$labels[match(Object[[Clusters]],rownames(Annotes1))]
-
-# plot
-#plots1 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = new_meta, label = FALSE, label.size = 7, #repel = TRUE)
-#plots2 <- DimPlot(Object, reduction = reduc, raster=TRUE, group.by = "orig.ident", label = FALSE, label.size #= 7, repel = TRUE)
-#print(plots1)
-```
 ```{r}
 convert_sample <- function(object) {
 #object <- hash_well_V_RNA

@@ -382,10 +382,6 @@ SaveSeuratRds(hash_well_VI_RNA, file = "hash_well_VI_RNA.RDS")
 SaveSeuratRds(hash_well_VI_SCT, file = "hash_well_VI_SCT.RDS")
 rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
 ```
-  Supplementary UMAP plot.
-```{r}
-
-```
   
 
 

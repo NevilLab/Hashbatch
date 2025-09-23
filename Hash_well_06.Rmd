@@ -20,11 +20,6 @@ library(ggpubr)
 
 options(Seurat.object.assay.version = 'v5')
 
-Total <- c() # Total number of cells
-After_cleanup <- c() # After mito/feature/count clean up 
-After_demux <- c() # After cleanup and demultiplexing
-po_ol <- c() # keep a record of the tissue
-idx <- c() # Record index
 ```
 
 Run through the wells and find the positive cells for each hash.
@@ -35,13 +30,7 @@ ind_adt <- read.xlsx('adt_ind.xlsx', colNames = FALSE)
 
 atoms <- list()
 n <- 1
-G_D_E <- c()
-I_H_E <- list()
-Dual_GDE <- c()
-Vlns_count <- list()
-Vlns_feature <- list()
-Q3D_c <- c()
-Q3D_f <- c()
+positive_cells <- list()
 setwd('./h5')
 for (j in 1:6) { #:16
   D.data <- Read10X_h5(paste('./', labl_hsh$Label[j], '.h5', sep = ""))
@@ -69,9 +58,6 @@ for (j in 1:6) { #:16
   D[["ADT"]] <- CreateAssayObject(counts = adt.counts)
   D <- NormalizeData(D, assay = "ADT", normalization.method = "CLR", verbose = TRUE) # NOrmalise ADT
   
-  # Record the total number of cells
-  Total <- c(Total, dim(D)[2])
-  
   # Rename cells to avoid future conflicts
   dataset_name <- paste(labl_hsh[j,4], labl_hsh[j,1], sep = "_")
   D$dataset <- dataset_name
@@ -79,9 +65,6 @@ for (j in 1:6) { #:16
   
   # Cleanup 
   D <- subset(D, subset = nFeature_RNA > 500 & nFeature_RNA < 3000 & percent.mt < 2.5 & nCount_RNA < 20000) 
-  
-  # Record the number of cells after cleanup
-  After_cleanup <- c(After_cleanup, dim(D)[2])
   
   # Demultiplexing (Seurat)
   D <- HTODemux(D, assay = "HTO", verbose = TRUE) # Demultiplex positive.quantile is at default
@@ -98,65 +81,119 @@ for (j in 1:6) { #:16
   temp_table <- table(D$HTO_classification.global)
   GDE <- temp_table[["Singlet"]]/dim(D)[2]
   
-  # Individual hash efficiency (IHE) <- hash_singlet/hash_positive
-  
+  # cell ids of +ve cells
   hto_data <- GetAssayData(object = D, assay = "HTO", layer = "count")
-  hash_positive <- c()
+  hash_positive <- list()
   for (q in 1:length(Seurat_thresh)) {
-    hash_positive <- c(hash_positive, length(which(hto_data[q,] > Seurat_thresh[q])))
+    hash_positive[[q]] <- hto_data[q, which(hto_data[q,] > Seurat_thresh[q])]
   }
   
+  positive_cells[[j]] <- hash_positive
   
-  # Record the number of cells after demultiplexing
-  After_demux <- c(After_demux, dim(D.singlet)[2])
+  Idents(D) <- "HTO_classification.global" 
+  D.singlet <- subset(D, idents = "Singlet")
   
-  # Annotate samples on tissue
-  D@meta.data$pool = labl_hsh[j,4]
-  
-  #Keep the demultiplexed, normalized data in the list
-  atoms[[n]] <- D
-  n <- n + 1
+  atoms[[j]] <- D.singlet
+}
+```
+Write a function to calculate x.
+```{r}
+XE_calc <- function(object, foucus_hash) {
+#object <- positive_cells[[1]]
+#focus_hash <- 3
 
-  po_ol <- c(po_ol, labl_hsh[j,4]) # keep a record of the pool
-  idx <- c(idx, labl_hsh[j,1]) # Record index
+outlist <- list()
+X <- c()
+
+collect <- c()
+for (i in setdiff(1:length(object), focus_hash)) {
+  temp_string1 <- names(object[[focus_hash]])
+
+  temp_string2 <- names(object[[i]])
   
+  X <- c(X, length(intersect(temp_string1, temp_string2))/length(temp_string1))
+  
+  collect <- c(collect, intersect(temp_string1, temp_string2))
+}
+
+E <- length(setdiff(temp_string1, collect))/length(temp_string1)
+
+outlist[["X"]] <- X
+outlist[["E"]] <- E
+
+return(outlist)
 }
 ```
 
 Now attempt solving y. 
 A function for y estimation. 
 ```{r}
-solve_y <- function(x, n, E) {
-  stopifnot(n >= 3, x > 0, x < 1,
-            E <= 1 - x + 1e-12,
-            E >= 1 - x*(n-1) - 1e-12)
-  g <- function(y) 1 - x*y + x*y*(1 - 1/y)^(n-1) - E
+solve_y <- function(x, hash, n, E) {
+  stopifnot(n >= 3, x[hash] > 0, x[hash] < 1,
+            E <= 1 - x[hash] + 1e-12,
+            E >= 1 - sum(x) - 1e-12)
+  g <- function(y) 1 - x[hash]*y + x[hash]*y*(1 - 1/y)^(n-1) - E
   uniroot(g, c(1 + 1e-9, 1e9))$root
 }
 ```
 
-Solve y for the different scenarios/datasets.
-Hash3. poolA.
-Hash7. PoolD.
-Hash12. poolF.
-Hash1. 8 hash data, RSatija.
+Calculate E, x now.
 ```{r}
-#Hash3. poolA.
-solve_y(x, n, E)
+#Hash4. poolA.
+object <- positive_cells[[1]]
+focus_hash <- 4
+outA4 <- XE_calc(object, foucus_hash)
+#solve_y(outA3[["X"]], 1, 4, outA3[["E"]])
+#solve_y(outA3[["X"]], 2, 4, outA3[["E"]])
+solve_y(outA4[["X"]], 3, 4, outA4[["E"]])
 
-#Hash7. PoolD.
-solve_y(x, n, E)
+#Hash8. PoolC.
+object <- positive_cells[[3]]
+focus_hash <- 4
+outC8 <- XE_calc(object, foucus_hash)
+#solve_y(outD9[["X"]], 1, 4, outD9[["E"]])
+#solve_y(outD9[["X"]], 2, 4, outD9[["E"]])
+solve_y(outC8[["X"]], 3, 4, outC8[["E"]])
 
-#Hash12. poolF.
-solve_y(x, n, E)
+#Hash14. PoolE.
+object <- positive_cells[[5]]
+focus_hash <- 4
+outE14 <- XE_calc(object, foucus_hash)
+#solve_y(outD9[["X"]], 1, 4, outD9[["E"]])
+#solve_y(outD9[["X"]], 2, 4, outD9[["E"]])
+solve_y(outE14[["X"]], 3, 4, outE14[["E"]])
 
-#Hash1. 8 hash data, RSatija.
-solve_y(x, n, E)
+
+#Hash4. poolF.
+object <- positive_cells[[6]]
+focus_hash <- 4
+outF4 <- XE_calc(object, foucus_hash)
+solve_y(outF4[["X"]], 1, 12, outF4[["E"]])
+
+#Hash8. poolF.
+object <- positive_cells[[6]]
+focus_hash <- 8
+outF8 <- XE_calc(object, foucus_hash)
+solve_y(outF8[["X"]], 1, 12, outF8[["E"]])
 ```
 
-Plot bardiagrams with error bars.
+Plot bardiagrams of x% from F.
 ```{r}
+df <- data.frame(1:11, outF4$X)
+colnames(df) <- c("serial", "x")
+ggplot(df, aes(serial, x)) + geom_bar(stat="identity") + theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.text = element_blank()) +
+  theme(axis.title = element_blank())
 
+df <- data.frame(1:11, outF8$X)
+colnames(df) <- c("serial", "x")
+ggplot(df, aes(serial, x)) + geom_bar(stat="identity") + theme_bw() + NoLegend() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank(),
+  axis.text = element_blank()) +
+  theme(axis.title = element_blank())
 ```
 
 
