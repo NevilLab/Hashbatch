@@ -1,8 +1,5 @@
 This markdown calculates the batch effects measures in the integrated reduction
-layers. Generates the relevant figures for figure 1 and supplementary items.
-
-It converts the Seurat objects to SingleCellObjects. Then it carries out batch measurements.
-Finally it creates plots for the main text and supplementary figures.
+layers. It converts the Seurat objects to SingleCellObjects. Then it carries out batch measurements.
 
 Load packages.
 ```{r message=FALSE}
@@ -184,47 +181,47 @@ return(all_comp_out)
 
 HW_I, 
 ```{r}
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 HW_I_RNA <- sample_metadata(readRDS("hash_well_I_RNA.RDS"))
 HW_I_SCT <- sample_metadata(readRDS("hash_well_I_SCT.RDS"))
 HW_I <- all_comp_eval(HW_I_RNA, HW_I_SCT)
-setwd("../BEffects1")
+setwd("./BEffects")
 saveRDS(HW_I, file = "HW_BE_I.RDS")
 rm(HW_I_RNA, HW_I_SCT, HW_I)
 ```
 HW_II,
 ```{r}
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 HW_II_RNA <- sample_metadata(readRDS("hash_well_II_RNA.RDS"))
 HW_II_SCT <- sample_metadata(readRDS("hash_well_II_SCT.RDS"))
 HW_II <- all_comp_eval(HW_II_RNA, HW_II_SCT)
-setwd("../BEffects1")
+setwd("./BEffects")
 saveRDS(HW_II, file = "HW_BE_II.RDS")
 rm(HW_II_RNA, HW_II_SCT, HW_II)
 ```
 HW_III,
 ```{r}
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 HW_III_RNA <- sample_metadata(readRDS("hash_well_III_RNA.RDS"))
 HW_III_SCT <- sample_metadata(readRDS("hash_well_III_SCT.RDS"))
 HW_III <- all_comp_eval(HW_III_RNA, HW_III_SCT)
-setwd("../BEffects1")
+setwd("./BEffects")
 saveRDS(HW_III, file = "HW_BE_III.RDS")
 rm(HW_III_RNA, HW_III_SCT, HW_III)
 ```
 HW_IV, 
 ```{r}
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 HW_IV_RNA <- sample_metadata(readRDS("hash_well_IV_RNA.RDS"))
 HW_IV_SCT <- sample_metadata(readRDS("hash_well_IV_SCT.RDS"))
 HW_IV <- all_comp_eval(HW_IV_RNA, HW_IV_SCT)
-setwd("../BEffects1")
+setwd("./BEffects")
 saveRDS(HW_IV, file = "HW_BE_IV.RDS")
 rm(HW_IV_RNA, HW_IV_SCT, HW_IV)
 ```
 HW_V, 
 ```{r}
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 HW_V_RNA <- sample_metadata(readRDS("hash_well_V_RNA.RDS"))
 HW_V <- list()
 HW_V[['pool']] <- Norm_eval(object <- HW_V_RNA, assay <- "RNA", group <- "orig.ident", dim_red <- "PCA")
@@ -233,17 +230,17 @@ HW_V[['hash']] <- Norm_eval(object <- HW_V_RNA, assay <- "RNA", group <- "HTO_ma
 HW_V[['hashwell']] <- Norm_eval(object <- HW_V_RNA, assay <- "RNA", group <- "orig.id", dim_red <- "PCA")
 HW_V[['celltype']] <- Norm_eval(object <- HW_V_RNA, 
                                      assay <- "RNA", group <- "unint_clusters", dim_red <- "PCA")
-setwd("../BEffects1")
+setwd("./BEffects")
 saveRDS(HW_V, file = "HW_BE_V.RDS")
 rm(HW_V_RNA, HW_V)
 ```
 HW_VI
 ```{r}
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 HW_VI_RNA <- sample_metadata(readRDS("hash_well_VI_RNA.RDS"))
 HW_VI_SCT <- sample_metadata(readRDS("hash_well_VI_SCT.RDS"))
 HW_VI <- all_comp_eval(HW_VI_RNA, HW_VI_SCT)
-setwd("../BEffects1")
+setwd("./BEffects")
 saveRDS(HW_VI, file = "HW_BE_VI.RDS")
 rm(HW_VI_RNA, HW_VI_SCT, HW_VI)
 ```

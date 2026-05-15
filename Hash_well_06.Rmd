@@ -24,14 +24,14 @@ options(Seurat.object.assay.version = 'v5')
 
 Run through the wells and find the positive cells for each hash.
 ```{r}
-setwd("../hash_well_data")
+setwd("./data")
 labl_hsh <- read.xlsx('HW_des.xlsx')
 ind_adt <- read.xlsx('adt_ind.xlsx', colNames = FALSE)
 
 atoms <- list()
 n <- 1
 positive_cells <- list()
-setwd('./h5')
+#setwd('./h5')
 for (j in 1:6) { #:16
   D.data <- Read10X_h5(paste('./', labl_hsh$Label[j], '.h5', sep = ""))
   k1 <- str_split(labl_hsh$hashtags_pick[j], " ") # pick up the hashes
@@ -150,7 +150,7 @@ solve_y(outA4[["X"]], 3, 4, outA4[["E"]])
 #Hash8. PoolC.
 object <- positive_cells[[3]]
 focus_hash <- 4
-outC8 <- XE_calc(object, foucus_hash)
+outC8 <- XE_calc(object, focus_hash)
 #solve_y(outD9[["X"]], 1, 4, outD9[["E"]])
 #solve_y(outD9[["X"]], 2, 4, outD9[["E"]])
 solve_y(outC8[["X"]], 3, 4, outC8[["E"]])
@@ -158,28 +158,15 @@ solve_y(outC8[["X"]], 3, 4, outC8[["E"]])
 #Hash14. PoolE.
 object <- positive_cells[[5]]
 focus_hash <- 4
-outE14 <- XE_calc(object, foucus_hash)
+outE14 <- XE_calc(object, focus_hash)
 #solve_y(outD9[["X"]], 1, 4, outD9[["E"]])
 #solve_y(outD9[["X"]], 2, 4, outD9[["E"]])
 solve_y(outE14[["X"]], 3, 4, outE14[["E"]])
-
-
-#Hash4. poolF.
-object <- positive_cells[[6]]
-focus_hash <- 4
-outF4 <- XE_calc(object, foucus_hash)
-solve_y(outF4[["X"]], 1, 12, outF4[["E"]])
-
-#Hash8. poolF.
-object <- positive_cells[[6]]
-focus_hash <- 8
-outF8 <- XE_calc(object, foucus_hash)
-solve_y(outF8[["X"]], 1, 12, outF8[["E"]])
 ```
 
 Plot bardiagrams of x% from F.
 ```{r}
-df <- data.frame(1:11, outF4$X)
+df <- data.frame(1:11, outA4$X)
 colnames(df) <- c("serial", "x")
 ggplot(df, aes(serial, x)) + geom_bar(stat="identity") + theme_bw() + NoLegend() +
   theme(panel.grid.major = element_blank(),

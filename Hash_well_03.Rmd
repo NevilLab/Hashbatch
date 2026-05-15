@@ -1,6 +1,6 @@
 This markdown plots the following:
 UMAPs of different integrations.
-violin plots of the entropies and local struct.
+violin plots of the entropies and local struct (figure 3).
 
 Load packages.
 ```{r message=FALSE}
@@ -11,7 +11,7 @@ library(ggpubr)
 
 Load the batch effect data frames.
 ```{r}
-setwd("../hash_well_data/BEffects1")
+setwd("./BEffects")
 HW_BE_I <- readRDS("HW_BE_I.RDS")
 HW_BE_II <- readRDS("HW_BE_II.RDS")
 HW_BE_III <- readRDS("HW_BE_III.RDS")
@@ -351,8 +351,10 @@ ggplot(bar_sample_data, aes(serial, bar_sample, fill = setup)) + geom_bar(stat="
 
 
 Load the Seurat objects.
+Note: These data is not part of the current repository because of their size.
+These are Seurat objects generated and saved by the script hash_well_01.Rmd using the .h5 files in ./data.
 ```{r message=FALSE}
-setwd("C:/Users/budha/Documents/R2/Hash_Batch/SObjects")
+setwd("./SObjects") # set directory where the integrated objects are saved
 hash_well_I_RNA <- readRDS("hash_well_I_RNA.RDS")
 hash_well_I_SCT <- readRDS("hash_well_I_SCT.RDS")
 hash_well_II_RNA <- readRDS("hash_well_II_RNA.RDS")

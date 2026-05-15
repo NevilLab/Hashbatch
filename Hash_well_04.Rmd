@@ -1,7 +1,7 @@
 This markdown carries out the DESeq analysis of the different wells from setup II.
 The purpose is to show that there is no remarkable difference between the wells when looking at the same samples, i.e., no serious batch effects.
 
-Then it carris out DESeq between samples alpha (baseline) and the rest of the samples (beta, gamma, delta, zeta, epsilon).
+Then it carries out DESeq between samples alpha (baseline) and the rest of the samples (beta, gamma, delta, zeta, epsilon).
 This comparison happens in IV and V to show that the differences are barely subject to batch effects.
 
 Carrying out some downstream functional analysis (GO) completes the analysis.
@@ -15,9 +15,10 @@ library(ggrepel)
 library(ggpubr)
 ```
 
-Load data.
+Load data. These data is not part of the current repository because of their size.
+These are Seurat objects generated and saved by the script hash_well_01.Rmd using the .h5 files in ./data.
 ```{r message=FALSE, warning=FALSE}
-setwd("C:/Users/budha/Documents/R2/Hash_Batch/SObjects")
+setwd("./SObjects") # set directory where the integrated objects are saved
 hash_well_II_RNA <- readRDS("hash_well_II_RNA.RDS")
 
 hash_well_IV_RNA <- readRDS("hash_well_IV_RNA.RDS")

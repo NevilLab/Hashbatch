@@ -1,4 +1,4 @@
-Figure 2.
+Figure 4.
 
 Load packages.
 ```{r message=FALSE}
@@ -24,7 +24,7 @@ idx <- c() # Record index
 
 Read up all files, demultiplex, and save in a list.
 ```{r}
-setwd("../hash_well_data")
+setwd("./data")
 labl_hsh <- read.xlsx('HW_des.xlsx')
 ind_adt <- read.xlsx('adt_ind.xlsx', colNames = FALSE)
 
@@ -37,7 +37,7 @@ Vlns_count <- list()
 Vlns_feature <- list()
 Q3D_c <- c()
 Q3D_f <- c()
-setwd('./h5')
+#setwd('./h5')
 for (j in 1:6) { #:16
   D.data <- Read10X_h5(paste('./', labl_hsh$Label[j], '.h5', sep = ""))
   k1 <- str_split(labl_hsh$hashtags_pick[j], " ") # pick up the hashes
@@ -225,6 +225,13 @@ colnames(GDE_all_data) <- c("Well", "GDE")
 ggplot(GDE_all_data, aes(x=Well, y=GDE)) +
   geom_segment( aes(x=Well, xend=Well, y=0, yend=GDE)) +
   geom_point( size=5, color="red", fill=alpha("orange", 0.3), alpha=0.7, shape=21, stroke=2) +
+  ylim(c(0,1)) + theme_bw() +
+  theme(panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = 1:13)
+
+ggplot(GDE_all_data, aes(x=Well, y=GDE)) +
+  geom_segment(aes(x=Well, xend=Well, y=0, yend=GDE), linewidth = 2.0) +
   ylim(c(0,1)) + theme_bw() +
   theme(panel.grid.major = element_blank(),
   panel.grid.minor = element_blank()) +

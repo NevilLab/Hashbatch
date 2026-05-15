@@ -1,10 +1,10 @@
-This markdown integrates the different sets within the hash_well dataset.
-The description of the sets are in the figure 1A of the manuscript.
+This markdown integrates the different designs within the dataset.
+The description of the designs are in the figure 2 of the manuscript.
 It covers different types of integration as provided by Seurat 5:
-CCAIntegration, RPCAIntegration, HarmonyIntegration, FastMNNIntegration, scVIIntegration
+CCAIntegration, RPCAIntegration, HarmonyIntegration
 It also carries out cell clustering on the reductions.
 
-All data are read from and saved at a different directory to keep the repository light.
+All data are read from the directory ./data and saved at ./SObjects.
 
 Load packages.
 ```{r message=FALSE}
@@ -78,12 +78,12 @@ return(rnacounts)
 Read files, demultiplex and merge objects.
 Clear everything from memory other than the merged object.
 ```{r message=FALSE}
-setwd("../hash_well_data")
+setwd("./data")
 labl_hsh <- read.xlsx('HW_des.xlsx')
 ind_adt <- read.xlsx('adt_ind.xlsx', colNames = FALSE)
 
 
-setwd('./h5')
+#setwd('./h5')
 for (j in 1:6) {
   D.data <- Read10X_h5(paste('./', labl_hsh$Label[j], '.h5', sep = ""))
   k1 <- str_split(labl_hsh$hashtags_pick[j], " ") # pick up the hashes
@@ -260,7 +260,7 @@ hash_well_I <- mObject
 hash_well_I_RNA <- RNAfunction(hash_well_I)
 hash_well_I_SCT <- SCTfunction(hash_well_I)
 
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 SaveSeuratRds(hash_well_I_RNA, file = "hash_well_I_RNA.RDS")
 SaveSeuratRds(hash_well_I_SCT, file = "hash_well_I_SCT.RDS")
 rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
@@ -284,7 +284,7 @@ hash_well_II <- subset(hash_well_II, subset = HTO_maxID != "Ms.Hashtag-14")
 hash_well_II_RNA <- RNAfunction(hash_well_II)
 hash_well_II_SCT <- SCTfunction(hash_well_II)
 
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 SaveSeuratRds(hash_well_II_RNA, file = "hash_well_II_RNA.RDS")
 SaveSeuratRds(hash_well_II_SCT, file = "hash_well_II_SCT.RDS")
 rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
@@ -300,7 +300,7 @@ hash_well_III <- subset(hash_well_III, subset = HTO_maxID != "Ms.Hashtag-2")
 hash_well_III_RNA <- RNAfunction(hash_well_III)
 hash_well_III_SCT <- SCTfunction(hash_well_III)
 
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 SaveSeuratRds(hash_well_III_RNA, file = "hash_well_III_RNA.RDS")
 SaveSeuratRds(hash_well_III_SCT, file = "hash_well_III_SCT.RDS")
 rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
@@ -315,7 +315,7 @@ hash_well_IV <- subset(hash_well_IV, subset = orig.ident != "pool_F")
 hash_well_IV_RNA <- RNAfunction(hash_well_IV)
 hash_well_IV_SCT <- SCTfunction(hash_well_IV)
 
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 SaveSeuratRds(hash_well_IV_RNA, file = "hash_well_IV_RNA.RDS")
 SaveSeuratRds(hash_well_IV_SCT, file = "hash_well_IV_SCT.RDS")
 rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
@@ -343,7 +343,7 @@ hash_well_V <- RunUMAP(hash_well_V, reduction = "pca", dims = 1:50, reduction.na
 
 #hash_well_V_RNA <- RNAfunction(hash_well_V)
 
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 SaveSeuratRds(hash_well_V, file = "hash_well_V_RNA.RDS")
 #rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
 ```
@@ -377,7 +377,7 @@ hash_well_VI <- subset(hash_well_VI, subset = orig.id != "FH14")
 hash_well_VI_RNA <- RNAfunction(hash_well_VI)
 hash_well_VI_SCT <- SCTfunction(hash_well_VI)
 
-setwd("../hash_well_data/SObjects")
+setwd("./SObjects")
 SaveSeuratRds(hash_well_VI_RNA, file = "hash_well_VI_RNA.RDS")
 SaveSeuratRds(hash_well_VI_SCT, file = "hash_well_VI_SCT.RDS")
 rm(list = setdiff(ls(), c("mObject", "RNAfunction", "SCTfunction")))
