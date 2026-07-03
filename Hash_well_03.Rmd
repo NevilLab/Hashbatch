@@ -571,10 +571,235 @@ UMAP for setup V.
 plot1 <- DimPlot_samples(hash_well_V_RNA, reduc = "umap.unint", ptsize = 2) 
 ```
 
+The UMAP with color legends for main text: revision 2 (response to reviewer 3).
+```{r}
+DimPlot(hash_well_I_SCT, reduction = "umap.rpca", group.by = "rpca_clusters")
+```
 
+Analysis of abundance across conditions (response to reviewer 3).
+Extract abundance of cells in each cluster in each condition/sample in each pipeline outcome.
 
+Function to include the sample metadata in the Seurat objects.
+```{r}
+sample_metadata <- function(object) {
 
+sample <- c()
+for (i in object$HTO_maxID) {
+  if (i %in% c("Ms.Hashtag-1","Ms.Hashtag-2")) {
+    sample <- c(sample, "alpha")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-3","Ms.Hashtag-4")) {
+    sample <- c(sample, "beta")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-5","Ms.Hashtag-6")) {
+    sample <- c(sample, "gamma")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-7","Ms.Hashtag-8")) {
+    sample <- c(sample, "delta")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-9","Ms.Hashtag-12")) {
+    sample <- c(sample, "epsilon")
+    next
+  }
+  if (i %in% c("Ms.Hashtag-13","Ms.Hashtag-14")) {
+    sample <- c(sample, "zeta")
+    next
+  }
+}
 
+object$sample <- sample
+return(object)
+}
+```
+
+Function for extraction of cluster sizes.
+```{r}
+clustsize_probe <- function(object) {
+# object <- hash_well_I_RNA
+#object <- sample_metadata(object)
+# split the object on conditions and clusters
+clust_size <- c(length(levels(object$harmony_clusters)),
+length(levels(object$cca_clusters)),
+length(levels(object$rpca_clusters)))
+
+return(clust_size)
+}
+```
+
+Function for extraction of cluster vs sample tables.
+```{r}
+clustsample_probe <- function(object) {
+# object <- hash_well_I_RNA
+object <- sample_metadata(object)
+# split the object on conditions and clusters
+harmony_table <- table(object$harmony_clusters, object$sample)
+cca_table <- table(object$cca_clusters, object$sample)
+rpca_table <- table(object$rpca_clusters, object$sample)
+
+clust_tables <- list(harmony_table, cca_table, rpca_table)
+return(clust_tables)
+}
+```
+
+Cluster size table.
+```{r}
+hash_well_I_RNA_clust <- clustsize_probe(hash_well_I_RNA)
+hash_well_I_SCT_clust <- clustsize_probe(hash_well_I_SCT)
+
+hash_well_II_RNA_clust <- clustsize_probe(hash_well_II_RNA)
+hash_well_II_SCT_clust <- clustsize_probe(hash_well_II_SCT)
+
+hash_well_III_RNA_clust <- clustsize_probe(hash_well_III_RNA)
+hash_well_III_SCT_clust <- clustsize_probe(hash_well_III_SCT)
+
+hash_well_IV_RNA_clust <- clustsize_probe(hash_well_IV_RNA)
+hash_well_IV_SCT_clust <- clustsize_probe(hash_well_IV_SCT)
+
+hash_well_VI_RNA_clust <- clustsize_probe(hash_well_VI_RNA)
+hash_well_VI_SCT_clust <- clustsize_probe(hash_well_VI_SCT)
+
+clust_size_table <- data.frame(c(hash_well_I_RNA_clust, hash_well_I_SCT_clust),
+                               c(hash_well_II_RNA_clust, hash_well_II_SCT_clust),
+                               c(hash_well_III_RNA_clust, hash_well_III_SCT_clust),
+                               c(hash_well_IV_RNA_clust, hash_well_IV_SCT_clust),
+                               c(hash_well_VI_RNA_clust, hash_well_VI_SCT_clust))
+
+colnames(clust_size_table) <- c("I", "II", "III", "IV", "VI")
+```
+
+Sample, celltype level stats.
+```{r}
+hash_well_I_RNA_clustsample <- clustsample_probe(hash_well_I_RNA)
+hash_well_I_SCT_clustsample <- clustsample_probe(hash_well_I_SCT)
+
+hash_well_II_RNA_clustsample <- clustsample_probe(hash_well_II_RNA)
+hash_well_II_SCT_clustsample <- clustsample_probe(hash_well_II_SCT)
+
+hash_well_III_RNA_clustsample <- clustsample_probe(hash_well_III_RNA)
+hash_well_III_SCT_clustsample <- clustsample_probe(hash_well_III_SCT)
+
+hash_well_IV_RNA_clustsample <- clustsample_probe(hash_well_IV_RNA)
+hash_well_IV_SCT_clustsample <- clustsample_probe(hash_well_IV_SCT)
+
+hash_well_VI_RNA_clustsample <- clustsample_probe(hash_well_VI_RNA)
+hash_well_VI_SCT_clustsample <- clustsample_probe(hash_well_VI_SCT)
+```
+
+A function to calculate coefficient of variation for each row.
+Get the average CV and CI of CV for each sample clust table.
+```{r}
+cv_calc <- function(object) {
+#object <- hash_well_I_RNA_clustsample
+
+object_h <- as.data.frame.matrix(object[[1]])
+object_c <- as.data.frame.matrix(object[[2]])
+object_r <- as.data.frame.matrix(object[[3]])
+
+cv_h <- c()
+cv_c <- c()
+cv_r <- c()
+
+for (k in 1:dim(object_h)[1]) {
+  cv_h <- c(cv_h, (sd(as.numeric(object_h[k,]), na.rm = TRUE) / mean(as.numeric(object_h[k,]), na.rm = TRUE)) * 100)
+}
+
+for (k in 1:dim(object_c)[1]) {
+  cv_c <- c(cv_c, (sd(as.numeric(object_c[k,]), na.rm = TRUE) / mean(as.numeric(object_c[k,]), na.rm = TRUE)) * 100)
+}
+
+for (k in 1:dim(object_r)[1]) {
+  cv_r <- c(cv_r, (sd(as.numeric(object_r[k,]), na.rm = TRUE) / mean(as.numeric(object_r[k,]), na.rm = TRUE)) * 100)
+}
+
+cv_h_mean <- round(mean(cv_h), digits = 2)
+cv_c_mean <- round(mean(cv_c), digits = 2)
+cv_r_mean <- round(mean(cv_r), digits = 2)
+
+cv_h_se <- round(1.96*(sd(cv_h)/sqrt(length(cv_h))), digits = 2)
+cv_c_se <- round(1.96*(sd(cv_c)/sqrt(length(cv_c))), digits = 2)
+cv_r_se <- round(1.96*(sd(cv_r)/sqrt(length(cv_r))), digits = 2)
+
+return(c(cv_h_mean, cv_c_mean, cv_r_mean, cv_h_se, cv_c_se, cv_r_se))
+}
+```
+
+Now generate the table of averaged CV and error margins.
+```{r}
+hash_well_I_RNA_cv <- cv_calc(hash_well_I_RNA_clustsample) 
+hash_well_I_SCT_cv <- cv_calc(hash_well_I_SCT_clustsample) 
+
+hash_well_III_RNA_cv <- cv_calc(hash_well_III_RNA_clustsample) 
+hash_well_III_SCT_cv <- cv_calc(hash_well_III_SCT_clustsample) 
+
+hash_well_IV_RNA_cv <- cv_calc(hash_well_IV_RNA_clustsample) 
+hash_well_IV_SCT_cv <- cv_calc(hash_well_IV_SCT_clustsample) 
+
+hash_well_VI_RNA_cv <- cv_calc(hash_well_VI_RNA_clustsample) 
+hash_well_VI_SCT_cv <- cv_calc(hash_well_VI_SCT_clustsample) 
+
+cv_mean_table <- data.frame(c(hash_well_I_RNA_cv[1:3], hash_well_I_SCT_cv[1:3]),
+                               c(hash_well_III_RNA_cv[1:3], hash_well_III_SCT_cv[1:3]),
+                               c(hash_well_IV_RNA_cv[1:3], hash_well_IV_SCT_cv[1:3]),
+                               c(hash_well_VI_RNA_cv[1:3], hash_well_VI_SCT_cv[1:3]))
+colnames(cv_mean_table) <- c("I", "III", "IV", "VI")
+
+cv_se_table <- data.frame(c(hash_well_I_RNA_cv[4:6], hash_well_I_SCT_cv[4:6]),
+                               c(hash_well_III_RNA_cv[4:6], hash_well_III_SCT_cv[4:6]),
+                               c(hash_well_IV_RNA_cv[4:6], hash_well_IV_SCT_cv[4:6]),
+                               c(hash_well_VI_RNA_cv[4:6], hash_well_VI_SCT_cv[4:6]))
+colnames(cv_se_table) <- c("I", "III", "IV", "VI")
+```
+
+Function to carry out Kruskal Wallis test on the columns to show that variation does not change across conditions.
+```{r}
+KruskalT <- function(object, removealpha) {
+#object <- hash_well_VI_RNA_clustsample
+
+object_h <- as.list(as.data.frame.matrix(object[[1]]))
+object_c <- as.list(as.data.frame.matrix(object[[2]]))
+object_r <- as.list(as.data.frame.matrix(object[[3]]))
+
+if (removealpha == "yes") {
+  object_h$alpha <- NULL
+  object_c$alpha <- NULL
+  object_r$alpha <- NULL
+}
+h_pval <- kruskal.test(object_h)
+c_pval <- kruskal.test(object_c)
+r_pval <- kruskal.test(object_r)
+
+h_pval <- round(h_pval$p.value, digits = 2)
+c_pval <- round(c_pval$p.value, digits = 2)
+r_pval <- round(r_pval$p.value, digits = 2)
+
+return(c(h_pval, c_pval, r_pval))
+}
+```
+
+Now generate the table of averaged CV and error margins.
+```{r}
+hash_well_I_RNA_kpval <- KruskalT(hash_well_I_RNA_clustsample, "no") 
+hash_well_I_SCT_kpval <- KruskalT(hash_well_I_SCT_clustsample, "no") 
+
+hash_well_III_RNA_kpval <- KruskalT(hash_well_III_RNA_clustsample, "no") 
+hash_well_III_SCT_kpval <- KruskalT(hash_well_III_SCT_clustsample, "no") 
+
+hash_well_IV_RNA_kpval <- KruskalT(hash_well_IV_RNA_clustsample, "no") 
+hash_well_IV_SCT_kpval <- KruskalT(hash_well_IV_SCT_clustsample, "no") 
+
+hash_well_VI_RNA_kpval <- KruskalT(hash_well_VI_RNA_clustsample, "yes") 
+hash_well_VI_SCT_kpval <- KruskalT(hash_well_VI_SCT_clustsample, "yes") 
+
+kpval_mean_table <- data.frame(c(hash_well_I_RNA_kpval, hash_well_I_SCT_kpval),
+                               c(hash_well_III_RNA_kpval, hash_well_III_SCT_kpval),
+                               c(hash_well_IV_RNA_kpval, hash_well_IV_SCT_kpval),
+                               c(hash_well_VI_RNA_kpval, hash_well_VI_SCT_kpval))
+colnames(kpval_mean_table) <- c("I", "III", "IV", "VI")
+```
 
 
 
